@@ -1,0 +1,1971 @@
+import tkinter as tk
+from tkinter import messagebox, simpledialog, ttk
+import random
+import json
+import os
+import time
+import threading
+from collections import deque
+
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+# --- Configuration ---
+DATA_FILE = "share_market_data.json"
+INITIAL_BALANCE = 10000
+SHARE_TICK_INTERVAL = 3000  # Milliseconds for price update (3 seconds)
+NEWS_TICK_INTERVAL = 10     # Number of price ticks before a new news event is considered
+
+# --- NEW: Transaction Fees ---
+TRANSACTION_FEE_PERCENTAGE = 0.001 # 0.1% fee on transaction value
+
+# --- Share Data (Example - expand as needed) ---
+# --- Share Data (All companies from the specified sectors included) ---
+SHARE_OPTIONS = {
+    # IT Sector
+    "TCS": [3500, 3400, 3600],
+    "Infosys": [1600, 1550, 1650],
+    "Wipro": [450, 430, 470],
+    "Tech Mahindra": [1200, 1180, 1220],
+    "HCL Tech": [1400, 1380, 1420],
+    "LTIMindtree": [5000, 4900, 5100],
+    "KPIT Tech": [1500, 1450, 1550],
+    "Route Mobile": [1800, 1750, 1850],
+    "Tanla Platforms": [900, 880, 920],
+    "Tata Elxsi": [7000, 6900, 7100],
+    "Cyient": [1500, 1450, 1550],
+    "Zensar Tech": [500, 480, 520],
+    "Intellect Design": [800, 780, 820],
+    "Mindtree": [3000, 2900, 3100],
+    "CAMS": [2500, 2450, 2550],
+    "CDSL": [1800, 1750, 1850],
+    "MCX": [2000, 1950, 2050],
+    "BSE": [2500, 2450, 2550],
+    "NSE": [3000, 2900, 3100],
+    "Mphasis": [2500, 2450, 2550],
+    "Coforge": [4000, 3900, 4100],
+    "Oracle Financial": [4000, 3900, 4100],
+    "Birlasoft": [500, 480, 520],
+    "Happiest Minds": [1200, 1150, 1250],
+    "eClerx": [2000, 1950, 2050],
+    "L&T Technology": [4000, 3900, 4100],
+    "Tata Communications": [1200, 1150, 1250],
+    "Indiamart": [2500, 2450, 2550],
+    "Sonata Software": [800, 780, 820],
+    "TeamLease": [3000, 2900, 3100],
+    "Zensar": [500, 480, 520],
+    "Persistent Systems": [4000, 3900, 4100],
+    "Tanla": [900, 880, 920],
+    "Affle India": [1200, 1150, 1250],
+    "MapmyIndia": [1500, 1450, 1550],
+    "eMudhra": [500, 480, 520],
+    "Easy Trip Planners": [400, 390, 410],
+    "CarTrade Tech": [1200, 1150, 1250],
+    "CMS Info Systems": [400, 390, 410],
+    "AGS Transact": [200, 190, 210],
+    "Aether Industries": [900, 880, 920],
+    "Prudent Corp": [800, 780, 820],
+    "Firstsource Solutions": [200, 190, 210],
+    "Quess Corp": [600, 580, 620],
+    "Syrma SGS": [400, 390, 410],
+    "Windlas Biotech": [300, 290, 310],
+    # News & Entertainment
+    "Zee Entertainment": [200, 190, 210],
+    "Sun TV Network": [600, 580, 620],
+    "TV18 Broadcast": [60, 55, 65],
+    "Network18": [80, 75, 85],
+    "PVR INOX": [1800, 1750, 1850],
+    "Shemaroo Entertainment": [150, 140, 160],
+    "Tips Industries": [400, 390, 410],
+    "Saregama India": [500, 480, 520],
+    "Balaji Telefilms": [60, 55, 65],
+    "Dish TV": [20, 18, 22],
+    "Nazara Technologies": [700, 680, 720],
+    "Mukta Arts": [50, 45, 55],
+    "Eros International": [30, 28, 32],
+    "Inox Leisure": [600, 580, 620],
+    "Entertainment Network": [200, 190, 210],
+    "PVR": [1800, 1750, 1850],
+    "INOX Leisure": [600, 580, 620],
+    "Radio City": [80, 75, 85],
+    "Den Networks": [40, 35, 45],
+    "Hathway Cable": [30, 28, 32],
+    # Beverages
+    "United Breweries": [1500, 1450, 1550],
+    "Radico Khaitan": [1200, 1180, 1220],
+    "Globus Spirits": [1000, 980, 1020],
+    "Sula Vineyards": [500, 490, 510],
+    "United Spirits": [1000, 980, 1020],
+    "Varun Beverages": [1200, 1180, 1220],
+    "Som Distilleries": [400, 390, 410],
+    "Tilaknagar Industries": [200, 190, 210],
+    "IFB Agro": [600, 580, 620],
+    "GM Breweries": [500, 480, 520],
+    "Radhika Beverages": [300, 290, 310],
+    "Associated Alcohols": [400, 390, 410],
+    "Piccadily Agro": [200, 190, 210],
+    "Khoday India": [150, 140, 160],
+    "Jagatjit Industries": [100, 90, 110],
+    # Shoes/Footwear
+    "Relaxo Footwear": [900, 880, 920],
+    "Mirza International": [200, 190, 210],
+    "Bata India": [1500, 1450, 1550],
+    "Metro Brands": [900, 880, 920],
+    "Campus Activewear": [400, 390, 410],
+    "Liberty Shoes": [300, 290, 310],
+    "Khadim India": [250, 240, 260],
+    "Sreeleathers": [250, 240, 260],
+    "Action Shoes": [120, 110, 130],
+    "Paragon Footwear": [100, 90, 110],
+    "VKC Group": [200, 190, 210],
+    "Red Chief": [300, 290, 310],
+    "Lancer Footwear": [150, 140, 160],
+    "Aqualite Industries": [120, 110, 130],
+    # Government Sector (PSUs, Defense, Railways, etc.)
+    "Bharat Electronics": [150, 140, 160],
+    "BEML": [2000, 1950, 2050],
+    "HAL": [3500, 3400, 3600],
+    "BEL": [150, 140, 160],
+    "BHEL": [120, 115, 125],
+    "Coal India": [250, 240, 260],
+    "NTPC": [180, 170, 190],
+    "ONGC": [150, 140, 160],
+    "GAIL": [120, 110, 130],
+    "SAIL": [90, 85, 95],
+    "IRCTC": [800, 780, 820],
+    "Rail Vikas Nigam": [150, 140, 160],
+    "IRFC": [40, 35, 45],
+    "Container Corp": [700, 680, 720],
+    "PowerGrid": [220, 210, 230],
+    "NHPC": [60, 55, 65],
+    "NLC India": [80, 75, 85],
+    "REC": [150, 140, 160],
+    "PFC": [200, 190, 210],
+    "Mazagon Dock": [2000, 1950, 2050],
+    "Garden Reach Shipbuilders": [800, 780, 820],
+    "Cochin Shipyard": [1200, 1150, 1250],
+    "Hindustan Aeronautics": [3500, 3400, 3600],
+    "Bharat Dynamics": [1200, 1150, 1250],
+    "GRSE": [800, 780, 820],
+    "RailTel": [150, 140, 160],
+    "IRCON": [100, 90, 110],
+    "RITES": [400, 390, 410],
+    "NBCC": [60, 55, 65],
+    "Engineers India": [120, 110, 130],
+    "HUDCO": [70, 65, 75],
+    # Space Sector (ISRO vendors, satellite, defense tech, etc.)
+    "Larsen & Toubro": [2500, 2450, 2550],
+    "Bharat Forge": [900, 880, 920],
+    "MTAR Tech": [1800, 1750, 1850],
+    "Centum Electronics": [600, 580, 620],
+    "Avantel": [400, 390, 410],
+    "Data Patterns": [1500, 1450, 1550],
+    "Paras Defence": [700, 680, 720],
+    "Godrej Aerospace": [1200, 1150, 1250],
+    "Ananth Technologies": [800, 780, 820],
+    "Walchandnagar Industries": [300, 290, 310],
+    "BEL Space": [200, 190, 210],
+    "Hindustan Aeronautics Space": [3500, 3400, 3600],
+    "Alpha Design": [400, 390, 410],
+    "Astrome Technologies": [300, 290, 310],
+    "Pixxel": [200, 190, 210],
+    "Skyroot Aerospace": [500, 480, 520],
+    "Dhruva Space": [400, 390, 410],
+    # Pharma/Healthcare
+    "Sun Pharma": [1200, 1180, 1220],
+    "Divi's Labs": [3500, 3400, 3600],
+    "Dr Reddy's": [5000, 4900, 5100],
+    "Cipla": [1200, 1180, 1220],
+    "Lupin": [900, 880, 920],
+    "Torrent Pharma": [1800, 1750, 1850],
+    "Biocon": [400, 390, 410],
+    "Aurobindo Pharma": [700, 680, 720],
+    "Gland Pharma": [1500, 1450, 1550],
+    "Alkem Labs": [3500, 3400, 3600],
+    "Thyrocare Tech": [700, 680, 720],
+    "Dr Lal Pathlabs": [2500, 2450, 2550],
+    "Metropolis Healthcare": [1800, 1750, 1850],
+    "Max Healthcare": [600, 580, 620],
+    "Fortis Healthcare": [300, 290, 310],
+    "Aster DM Healthcare": [400, 380, 420],
+    "Narayana Hrudayalaya": [1000, 980, 1020],
+    # Banking/Finance
+    "HDFC Bank": [1700, 1650, 1750],
+    "ICICI Bank": [900, 880, 920],
+    "SBI": [600, 580, 620],
+    "Axis Bank": [900, 880, 920],
+    "IndusInd Bank": [1200, 1150, 1250],
+    "Kotak Bank": [1800, 1750, 1850],
+    "PNB": [60, 55, 65],
+    "Bank of Baroda": [120, 110, 130],
+    "Canara Bank": [100, 90, 110],
+    "Union Bank": [80, 75, 85],
+    "IDFC First Bank": [70, 65, 75],
+    "Yes Bank": [20, 18, 22],
+    "Bajaj Finance": [7000, 6900, 7100],
+    "LIC": [600, 580, 620],
+    "HDFC Life": [600, 580, 620],
+    "SBI Life": [1200, 1150, 1250],
+    "ICICI Pru Life": [500, 480, 520],
+    "PNB Housing": [700, 680, 720],
+    "LIC Housing Finance": [400, 390, 410],
+    "HDFC AMC": [2500, 2450, 2550],
+    "Nippon Life AMC": [400, 390, 410],
+    "UTI AMC": [800, 780, 820],
+    "Aditya Birla Sun Life AMC": [600, 580, 620],
+    "Policybazaar": [800, 780, 820],
+    "PB Fintech": [700, 680, 720],
+    # Auto
+    "Maruti Suzuki": [9000, 8900, 9100],
+    "Tata Motors": [600, 580, 620],
+    "Ashok Leyland": [180, 170, 190],
+    "Eicher Motors": [3500, 3400, 3600],
+    "Hero MotoCorp": [3000, 2900, 3100],
+    "Bajaj Auto": [4000, 3900, 4100],
+    "TVS Motor": [1200, 1150, 1250],
+    "Motherson Sumi": [300, 290, 310],
+    "Balkrishna Industries": [2500, 2450, 2550],
+    "MRF": [100000, 99000, 101000],
+    "Apollo Tyres": [400, 390, 410],
+    "CEAT": [1200, 1150, 1250],
+    "Exide Industries": [200, 190, 210],
+    "Amara Raja Batteries": [600, 580, 620],
+    "Sundaram Fasteners": [1200, 1150, 1250],
+    # Cement
+    "UltraTech Cement": [8000, 7900, 8100],
+    "Shree Cement": [25000, 24500, 25500],
+    "Ambuja Cement": [500, 480, 520],
+    "ACC": [2500, 2450, 2550],
+    "Grasim": [1800, 1750, 1850],
+    # Metal
+    "Jindal Steel": [600, 580, 620],
+    "Tata Steel": [120, 110, 130],
+    "JSW Steel": [700, 680, 720],
+    "Vedanta": [300, 290, 310],
+    "Hindalco": [400, 390, 410],
+    "Bharat Forge": [900, 880, 920],
+    # Energy
+    "Reliance": [2500, 2450, 2550],
+    "ONGC": [150, 140, 160],
+    "Coal India": [250, 240, 260],
+    "NTPC": [180, 170, 190],
+    "PowerGrid": [220, 210, 230],
+    "Adani Green": [1000, 980, 1020],
+    # Consumer Goods
+    "HUL": [2500, 2450, 2550],
+    "Nestle India": [22000, 21500, 22500],
+    "Dabur India": [600, 580, 620],
+    "Britannia": [4000, 3900, 4100],
+    "Godrej Consumer": [1000, 980, 1020],
+    "ITC": [400, 390, 410],
+    "Asian Paints": [3000, 2900, 3100],
+    # Retail/E-Commerce
+    "DMart": [4000, 3900, 4100],
+    "Trent": [1500, 1450, 1550],
+    "Nykaa": [1200, 1150, 1250],
+    "Delhivery": [400, 390, 410],
+    "Zomato": [100, 90, 110],
+    "Paytm": [800, 780, 820],
+    # Aviation
+    "Indigo": [2500, 2450, 2550],
+    "SpiceJet": [50, 45, 55],
+    "Jet Airways": [100, 90, 110],
+    # Logistics
+    "Blue Dart": [6000, 5900, 6100],
+    "Container Corp": [700, 680, 720],
+    "GATI": [120, 110, 130],
+    "Allcargo Logistics": [400, 390, 410],
+    "VRL Logistics": [600, 580, 620],
+    # Infrastructure/Engineering
+    "L&T": [2500, 2450, 2550],
+    "Adani Ports": [700, 680, 720],
+    "GMR Infra": [50, 45, 55],
+    "IRB Infra": [300, 290, 310],
+    "Kalpataru Power": [600, 580, 620],
+    "KEC International": [500, 480, 520],
+    "CG Power": [400, 390, 410],
+    "Sterlite Tech": [200, 190, 210],
+    "ABB India": [5000, 4900, 5100],
+    "Siemens": [4000, 3900, 4100],
+    "Thermax": [2500, 2450, 2550],
+    "Honeywell Auto": [40000, 39500, 40500],
+    "Schneider Electric": [3000, 2900, 3100],
+    "Bosch": [20000, 19500, 20500],
+    "Schaeffler India": [8000, 7900, 8100],
+    "Timken India": [3000, 2900, 3100],
+    "SKF India": [4000, 3900, 4100],
+    # Electricals/Consumer Durables
+    "Polycab": [3000, 2900, 3100],
+    "Havells": [1500, 1450, 1550],
+    "V-Guard": [300, 290, 310],
+    "Bajaj Electricals": [1200, 1150, 1250],
+    "Crompton Greaves": [400, 390, 410],
+    # --- Added more shares for variety and volume ---
+    "Finolex Cables": [600, 580, 620],
+    "Whirlpool": [2000, 1950, 2050],
+    "IFB Industries": [1200, 1150, 1250],
+    "Symphony": [1000, 980, 1020],
+    "Blue Star": [1500, 1450, 1550],
+    "Voltas": [1200, 1150, 1250],
+    "Godrej Properties": [2000, 1950, 2050],
+    "Oberoi Realty": [1200, 1150, 1250],
+    "Prestige Estates": [800, 780, 820],
+    "PI Industries": [3500, 3400, 3600],
+    "Laurus Labs": [400, 390, 410],
+    "Navin Fluorine": [4000, 3900, 4100],
+    "Tata Chemicals": [1000, 980, 1020],
+    "Laxmi Organic": [400, 390, 410],
+    "Aarti Industries": [800, 780, 820],
+    "Alembic Pharma": [700, 680, 720],
+    "Ami Organics": [1200, 1150, 1250],
+    "Tatva Chintan": [2000, 1950, 2050],
+    "Chemplast Sanmar": [500, 480, 520],
+    "Anupam Rasayan": [900, 880, 920],
+    "Heranba Industries": [400, 390, 410],
+    "India Pesticides": [300, 290, 310],
+    "Indigo Paints": [1500, 1450, 1550],
+    "Kalyan Jewellers": [200, 190, 210],
+    "Jubilant FoodWorks": [600, 580, 620],
+    "Burger King": [150, 140, 160],
+    "Barbeque Nation": [1200, 1150, 1250],
+    "United Spirits": [1000, 980, 1020],
+    "Vijaya Diagnostic": [400, 390, 410],
+    "Home First Finance": [800, 780, 820],
+    "Aptus Value Housing": [400, 390, 410],
+    "Emami": [400, 390, 410],
+    "Rolex Rings": [1200, 1150, 1250],
+    "Exxaro Tiles": [200, 190, 210],
+    "Dodla Dairy": [600, 580, 620],
+    "Rainbow Children": [800, 780, 820],
+    "Angel One": [2000, 1950, 2050],
+    "ICICI Securities": [600, 580, 620],
+    "V-Mart Retail": [2000, 1950, 2050],
+    "Metro Brands": [900, 880, 920],
+    "Craftsman Automation": [3000, 2900, 3100],
+    "Sansera Engineering": [1200, 1150, 1250],
+    # --- More companies for diversity (random names and sectors) ---
+    "Snapdeal": [100, 90, 110],
+    "Flipkart": [400, 390, 410],
+    "Ola Cabs": [300, 290, 310],
+    "Uber India": [350, 340, 360],
+    "Swiggy": [200, 190, 210],
+    "BigBasket": [150, 140, 160],
+    "Byju's": [500, 480, 520],
+    "Unacademy": [400, 390, 410],
+    "Vedantu": [300, 290, 310],
+    "PhysicsWallah": [250, 240, 260],
+    "PayU": [600, 580, 620],
+    "Razorpay": [700, 680, 720],
+    "PhonePe": [800, 780, 820],
+    "Mobikwik": [200, 190, 210],
+    "PolicyBazaar": [900, 880, 920],
+    "Groww": [1000, 980, 1020],
+    "Zerodha": [1200, 1150, 1250],
+    "Upstox": [1100, 1080, 1120],
+    "Angel Broking": [1300, 1280, 1320],
+    "5paisa": [400, 390, 410],
+    "Paytm Money": [500, 480, 520],
+    "Delhivery Ltd": [450, 440, 460],
+    "CarDekho": [300, 290, 310],
+    "Cars24": [350, 340, 360],
+    "Spinny": [250, 240, 260],
+    "Droom": [200, 190, 210],
+    "Myntra": [600, 580, 620],
+    "Ajio": [700, 680, 720],
+    "Tata Cliq": [800, 780, 820],
+    "Reliance Digital": [900, 880, 920],
+    "Croma": [1000, 980, 1020],
+    "Vijay Sales": [1100, 1080, 1120],
+    "Pepperfry": [1200, 1150, 1250],
+    "Urban Ladder": [1300, 1280, 1320],
+    "FabIndia": [1400, 1380, 1420],
+    "Raymond": [1500, 1450, 1550],
+    "Arvind Fashions": [1600, 1580, 1620],
+    "Aditya Birla Fashion": [1700, 1680, 1720],
+    "Pantaloons": [1800, 1780, 1820],
+    "Shoppers Stop": [1900, 1880, 1920],
+    "Westside": [2000, 1980, 2020],
+    "Future Retail": [2100, 2080, 2120],
+    "Spencer's Retail": [2200, 2180, 2220],
+    "Big Bazaar": [2300, 2280, 2320],
+    "Dabur": [2400, 2380, 2420],
+    "Godrej": [2500, 2480, 2520],
+    "Marico": [2600, 2580, 2620],
+    "Emami Ltd": [2700, 2680, 2720],
+    "Patanjali": [2800, 2780, 2820],
+    "Havmor": [2900, 2880, 2920],
+    "Amul": [3000, 2980, 3020],
+    "Mother Dairy": [3100, 3080, 3120],
+    "Parle": [3200, 3180, 3220],
+    "Britannia Ind": [3300, 3280, 3320],
+    "ITC Foods": [3400, 3380, 3420],
+    "Nestle": [3500, 3480, 3520],
+    "Cadbury": [3600, 3580, 3620],
+    "Hershey India": [3700, 3680, 3720],
+    "PepsiCo India": [3800, 3780, 3820],
+    "Coca Cola India": [3900, 3880, 3920],
+    "Bisleri": [4000, 3980, 4020],
+    "Kingfisher": [4100, 4080, 4120],
+    "Royal Enfield": [4200, 4180, 4220],
+    "TVS Electronics": [4300, 4280, 4320],
+    "Hero Electric": [4400, 4380, 4420],
+    "Ather Energy": [4500, 4480, 4520],
+    "Okinawa Autotech": [4600, 4580, 4620],
+    "Ampere Vehicles": [4700, 4680, 4720],
+    "Simple Energy": [4800, 4780, 4820],
+    "Bounce Infinity": [4900, 4880, 4920],
+    "Revolt Motors": [5000, 4980, 5020],
+    "Tork Motors": [5100, 5080, 5120],
+    "Ultraviolette": [5200, 5180, 5220],
+    "Mahindra Electric": [5300, 5280, 5320],
+    "MG Motors": [5400, 5380, 5420],
+    "Kia Motors": [5500, 5480, 5520],
+    "Hyundai India": [5600, 5580, 5620],
+    "Renault India": [5700, 5680, 5720],
+    "Nissan India": [5800, 5780, 5820],
+    "Volkswagen India": [5900, 5880, 5920],
+    "Skoda India": [6000, 5980, 6020],
+    "Ford India": [6100, 6080, 6120],
+    "Chevrolet India": [6200, 6180, 6220],
+    "Fiat India": [6300, 6280, 6320],
+    "Jeep India": [6400, 6380, 6420],
+    "Isuzu Motors": [6500, 6480, 6520],
+    "Force Motors": [6600, 6580, 6620],
+    "Ashok Leyland Ltd": [6700, 6680, 6720],
+    "Eicher Motors Ltd": [6800, 6780, 6820],
+    "SML Isuzu": [6900, 6880, 6920],
+    "Swaraj Mazda": [7000, 6980, 7020],
+    "Tata Power": [7100, 7080, 7120],
+    "Adani Power": [7200, 7180, 7220],
+    "JSW Energy": [7300, 7280, 7320],
+    "NHPC Ltd": [7400, 7380, 7420],
+    "SJVN": [7500, 7480, 7520],
+    "Torrent Power": [7600, 7580, 7620],
+    "CESC": [7700, 7680, 7720],
+    "BHEL Power": [7800, 7780, 7820],
+    "NTPC Green": [7900, 7880, 7920],
+    "Reliance Infra": [8000, 7980, 8020],
+    "Sterlite Power": [8100, 8080, 8120],
+    "Kalpataru Power Ltd": [8200, 8180, 8220],
+    "KEC Infra": [8300, 8280, 8320],
+    "L&T Infra": [8400, 8380, 8420],
+    "GMR Airports": [8500, 8480, 8520],
+    "Adani Airports": [8600, 8580, 8620],
+    "Bangalore Int Airport": [8700, 8680, 8720],
+    "Delhi Int Airport": [8800, 8780, 8820],
+    "Mumbai Int Airport": [8900, 8880, 8920],
+    "Chennai Int Airport": [9000, 8980, 9020],
+    "Hyderabad Int Airport": [9100, 9080, 9120],
+    "Kolkata Int Airport": [9200, 9180, 9220],
+    "Cochin Int Airport": [9300, 9280, 9320],
+    "Goa Int Airport": [9400, 9380, 9420],
+    "Jaipur Int Airport": [9500, 9480, 9520],
+    "Lucknow Int Airport": [9600, 9580, 9620],
+    "Ahmedabad Int Airport": [9700, 9680, 9720],
+    "Pune Int Airport": [9800, 9780, 9820],
+    "Indore Int Airport": [9900, 9880, 9920],
+    "Bhopal Int Airport": [10000, 9980, 10020],
+    # --- Add more companies below as needed ---
+    "Adani Enterprises": [2500, 2450, 2550],
+    "Adani Wilmar": [600, 580, 620],
+    "Adani Transmission": [1200, 1150, 1250],
+    "Adani Total Gas": [1100, 1080, 1120],
+    "Adani Ports SEZ": [700, 680, 720],
+    "HDFC": [2800, 2750, 2850],
+    "ICICI Prudential": [500, 480, 520],
+    "SBI Cards": [800, 780, 820],
+    "Bandhan Bank": [250, 240, 260],
+    "Federal Bank": [120, 110, 130],
+    "RBL Bank": [180, 170, 190],
+    "IDBI Bank": [60, 55, 65],
+    "UCO Bank": [40, 35, 45],
+    "Indian Bank": [120, 110, 130],
+    "Central Bank": [30, 28, 32],
+    "Dena Bank": [25, 20, 30],
+    "Allahabad Bank": [35, 30, 40],
+    "Syndicate Bank": [45, 40, 50],
+    "Corporation Bank": [55, 50, 60],
+    "Andhra Bank": [65, 60, 70],
+    "Oriental Bank": [75, 70, 80],
+    "United Bank": [85, 80, 90],
+    "Punjab & Sind Bank": [95, 90, 100],
+    "South Indian Bank": [105, 100, 110],
+    "Dhanlaxmi Bank": [115, 110, 120],
+    "Karur Vysya Bank": [125, 120, 130],
+    "Lakshmi Vilas Bank": [135, 130, 140],
+    "Jammu & Kashmir Bank": [145, 140, 150],
+    "City Union Bank": [155, 150, 160],
+    "DCB Bank": [165, 160, 170],
+    "Equitas Bank": [175, 170, 180],
+    "Ujjivan Small Finance": [185, 180, 190],
+    "AU Small Finance": [195, 190, 200],
+    "IDFC Bank": [205, 200, 210],
+    "YES Securities": [215, 210, 220],
+    "Motilal Oswal": [225, 220, 230],
+    "Edelweiss": [235, 230, 240],
+    "JM Financial": [245, 240, 250],
+    "Geojit Financial": [255, 250, 260],
+    "IIFL Finance": [265, 260, 270],
+    "Muthoot Finance": [275, 270, 280],
+    "Manappuram Finance": [285, 280, 290],
+    "Cholamandalam Finance": [295, 290, 300],
+    "Shriram Transport": [305, 300, 310],
+    "Mahindra Finance": [315, 310, 320],
+    "L&T Finance": [325, 320, 330],
+    "Bajaj Finserv": [335, 330, 340],
+    "Sundaram Finance": [345, 340, 350],
+    "Can Fin Homes": [355, 350, 360],
+    "Repco Home Finance": [365, 360, 370],
+    "PNB Gilts": [375, 370, 380],
+    "SBI Mutual Fund": [385, 380, 390],
+    "UTI Mutual Fund": [395, 390, 400],
+    "Nippon India Mutual": [405, 400, 410],
+    "Franklin Templeton": [415, 410, 420],
+    "ICICI Mutual Fund": [425, 420, 430],
+    "HDFC Mutual Fund": [435, 430, 440],
+    "Axis Mutual Fund": [445, 440, 450],
+    "Kotak Mutual Fund": [455, 450, 460],
+    "Sundaram Mutual Fund": [465, 460, 470],
+    "DSP Mutual Fund": [475, 470, 480],
+    "Tata Mutual Fund": [485, 480, 490],
+    "Aditya Birla Mutual": [495, 490, 500],
+    "LIC Mutual Fund": [505, 500, 510],
+    "IDFC Mutual Fund": [515, 510, 520],
+    "Invesco Mutual Fund": [525, 520, 530],
+    "Mirae Asset": [535, 530, 540],
+    "SBI Life Insurance": [545, 540, 550],
+    "ICICI Lombard": [555, 550, 560],
+    "HDFC Ergo": [565, 560, 570],
+    "Bajaj Allianz": [575, 570, 580],
+    "Max Life Insurance": [585, 580, 590],
+    "Star Health": [595, 590, 600],
+    "Care Health": [605, 600, 610],
+    "Religare Health": [615, 610, 620],
+    "Apollo Munich": [625, 620, 630],
+    "ICICI Direct": [635, 630, 640],
+    "HDFC Securities": [645, 640, 650],
+    "Kotak Securities": [655, 650, 660],
+    "Axis Securities": [665, 660, 670],
+    "Motilal Oswal Securities": [675, 670, 680],
+    "Angel One Securities": [685, 680, 690],
+    "Upstox Securities": [695, 690, 700],
+    "Groww Securities": [705, 700, 710],
+    "Zerodha Securities": [715, 710, 720],
+    "Paytm Securities": [725, 720, 730],
+    "5paisa Securities": [735, 730, 740],
+    "ICICI Home Finance": [745, 740, 750],
+    "HDFC Home Finance": [755, 750, 760],
+    "LIC Home Finance": [765, 760, 770],
+    "PNB Home Finance": [775, 770, 780],
+    "SBI Home Finance": [785, 780, 790],
+    "Axis Home Finance": [795, 790, 800],
+    "Kotak Home Finance": [805, 800, 810],
+    "Canara Home Finance": [815, 810, 820],
+    "Bank of Baroda Home": [825, 820, 830],
+    "IDFC Home Finance": [835, 830, 840],
+    "Indiabulls Housing": [845, 840, 850],
+    "Dewan Housing": [855, 850, 860],
+    "Reliance Home Finance": [865, 860, 870],
+    "Tata Housing Finance": [875, 870, 880],
+    "Aditya Birla Housing": [885, 880, 890],
+    "Piramal Housing": [895, 890, 900],
+    "L&T Housing Finance": [905, 900, 910],
+    "Shriram Housing": [915, 910, 920],
+    "Sundaram Housing": [925, 920, 930],
+    "Repco Housing": [935, 930, 940],
+    "GIC Housing": [945, 940, 950],
+    "PNB MetLife": [955, 950, 960],
+    "SBI General Insurance": [965, 960, 970],
+    "ICICI General Insurance": [975, 970, 980],
+    "HDFC General Insurance": [985, 980, 990],
+    "Bajaj General Insurance": [90, 990, 4000],
+}
+
+
+seen = set()
+duplicates = set()
+for name in SHARE_OPTIONS:
+    if name in seen:
+        duplicates.add(name)
+    seen.add(name)
+if duplicates:
+    print("Duplicate company names found:", duplicates)
+else:
+    print("No duplicate company names found.")
+
+if len(SHARE_OPTIONS) < 100:
+    print(f"Warning: Only {len(SHARE_OPTIONS)} shares defined. Adding dummy shares.")
+    for i in range(len(SHARE_OPTIONS), 101):
+        SHARE_OPTIONS[f"DummyShare{i+1}"] = [random.randint(50, 500), random.randint(40, 450), random.randint(550, 600)]
+
+SHARE_SECTORS = {
+    "IT": [
+        "TCS", "Infosys", "Wipro", "Tech Mahindra", "HCL Tech", "LTIMindtree", "Persistent", "Mphasis", "Persistent Systems", "KPIT Tech", "Route Mobile", "Tanla Platforms", "Tata Elxsi", "Cyient", "Zensar Tech", "Intellect Design", "Mindtree"
+    ],
+    "Banking": [
+        "HDFC Bank", "ICICI Bank", "SBI", "Axis Bank", "IndusInd Bank", "Kotak Bank", "PNB", "Bank of Baroda", "Canara Bank", "Union Bank", "IDFC First Bank", "Yes Bank"
+    ],
+    "Auto": [
+        "Maruti Suzuki", "Tata Motors", "Ashok Leyland", "Eicher Motors", "Hero MotoCorp", "Bajaj Auto", "TVS Motor", "Motherson Sumi", "Balkrishna Industries", "MRF", "Apollo Tyres", "CEAT", "Exide Industries", "Amara Raja Batteries", "Sundaram Fasteners"
+    ],
+    "Pharma": [
+        "Sun Pharma", "Divi's Labs", "Dr Reddy's", "Cipla", "Lupin", "Torrent Pharma", "Biocon", "Aurobindo Pharma", "Gland Pharma", "Alkem Labs", "Thyrocare Tech", "Dr Lal Pathlabs", "Metropolis Healthcare"
+    ],
+    "Cement": [
+        "UltraTech Cement", "Shree Cement", "Ambuja Cement", "ACC", "Grasim"
+    ],
+    "Metal": [
+        "Jindal Steel", "Tata Steel", "JSW Steel", "Vedanta", "Hindalco", "Bharat Forge"
+    ],
+    "Energy": [
+        "Reliance", "ONGC", "Coal India", "NTPC", "PowerGrid", "Adani Green"
+    ],
+    "Consumer Goods": [
+        "HUL", "Nestle India", "Dabur India", "Britannia", "Godrej Consumer", "ITC", "Asian Paints", "United Breweries", "Radico Khaitan", "Globus Spirits", "Sula Vineyards", "Relaxo Footwear", "Mirza International"
+    ],
+    "Healthcare": [
+        "Apollo Hospitals", "Max Healthcare", "Fortis Healthcare", "Aster DM Healthcare", "Narayana Hrudayalaya", "Thyrocare Tech", "Dr Lal Pathlabs", "Metropolis Healthcare"
+    ],
+    "Logistics": [
+        "Blue Dart", "Container Corp", "GATI", "Allcargo Logistics", "VRL Logistics", "Delhivery"
+    ],
+    "Real Estate": [
+        "DLF", "Oberoi Realty", "Prestige Estates"
+    ],
+    "Finance": [
+        "Bajaj Finance", "LIC", "HDFC Life", "SBI Life", "ICICI Pru Life", "PNB Housing", "LIC Housing Finance", "HDFC AMC", "Nippon Life AMC", "UTI AMC", "Aditya Birla Sun Life AMC", "Policybazaar", "PB Fintech", "CAMS", "CDSL", "MCX", "BSE", "NSE"
+    ],
+    "Aviation": [
+        "Indigo", "SpiceJet", "Jet Airways"
+    ],
+    "Retail": [
+        "DMart", "Trent", "Nykaa", "Delhivery", "Zomato", "Paytm"
+    ],
+    "FMCG": [
+        "HUL", "Nestle India", "Britannia", "Dabur India", "Godrej Consumer", "ITC"
+    ],
+    "Gas & Utilities": [
+        "Gujarat Gas", "Indraprastha Gas", "Mahanagar Gas", "PowerGrid", "NTPC"
+    ],
+    "Infrastructure": [
+        "L&T", "Adani Ports", "GMR Infra", "IRB Infra", "Kalpataru Power", "KEC International", "CG Power", "Sterlite Tech"
+    ],
+    "Electricals": [
+        "Polycab", "Havells", "V-Guard", "Bajaj Electricals", "Crompton Greaves", "Voltas", "Blue Star", "Whirlpool", "IFB Industries", "Symphony"
+    ],
+    "Engineering": [
+        "ABB India", "Siemens", "BHEL", "Thermax", "Honeywell Auto", "Schneider Electric", "Bosch", "Schaeffler India", "Timken India", "SKF India"
+    ],
+    "Beverages": [
+        "United Breweries", "Radico Khaitan", "Globus Spirits", "Sula Vineyards"
+    ],
+    "Misc": [
+        "Trent", "PIDILITIND", "Coforge", "IRCTC", "MRF", "Sundaram Fasteners", "Route Mobile", "Tanla Platforms", "Persistent Systems", "Cyient", "Zensar Tech", "Intellect Design", "Mindtree", "CAMS", "CDSL", "MCX", "BSE", "NSE", "Allcargo Logistics", "VRL Logistics", "Jet Airways", "Policybazaar", "PB Fintech", "Blue Dart", "Container Corp", "GATI", "Delhivery", "Schaeffler India", "Timken India", "ABB India", "Siemens", "BHEL", "Thermax", "Honeywell Auto", "Schneider Electric", "CG Power", "KEC International", "Kalpataru Power", "Sterlite Tech", "Finolex Cables", "Polycab", "Havells", "V-Guard", "Bajaj Electricals", "Crompton Greaves", "Voltas", "Blue Star", "Whirlpool", "IFB Industries", "Symphony", "Relaxo Footwear", "Mirza International"
+    ],
+    # --- Additional Sectors and Mappings ---
+    "Chemicals": [
+        "PI Industries", "Laurus Labs", "Navin Fluorine", "Tata Chemicals", "Laxmi Organic", "Aarti Industries", "Alembic Pharma", "Ami Organics", "Tatva Chintan", "Chemplast Sanmar", "Anupam Rasayan", "Heranba Industries", "India Pesticides"
+    ],
+    "Insurance": [
+        "HDFC Life", "SBI Life", "ICICI Pru Life", "LIC"
+    ],
+    "AMC": [
+        "HDFC AMC", "Nippon Life AMC", "UTI AMC", "Aditya Birla Sun Life AMC"
+    ],
+    "Batteries": [
+        "Exide Industries", "Amara Raja Batteries"
+    ],
+    "Paints": [
+        "Asian Paints", "Indigo Paints"
+    ],
+    "Jewellery": [
+        "Kalyan Jewellers"
+    ],
+    "Food & Beverages": [
+        "Jubilant FoodWorks", "Burger King", "Barbeque Nation", "Varun Beverages", "United Spirits", "Radico Khaitan", "Globus Spirits", "Sula Vineyards"
+    ],
+    "Diagnostics": [
+        "Dr Lal Pathlabs", "Metropolis Healthcare", "Vijaya Diagnostic"
+    ],
+    "Technology": [
+        "Affle India", "MapmyIndia", "eMudhra", "Easy Trip Planners", "CarTrade Tech", "CMS Info Systems", "AGS Transact", "Aether Industries", "Prudent Corp"
+    ],
+    "E-Commerce": [
+        "Nykaa", "Zomato", "Paytm", "Delhivery Ltd", "Easy Trip Planners"
+    ],
+    "Footwear": [
+        "Relaxo Footwear", "Metro Brands", "Campus Activewear"
+    ],
+    "Housing Finance": [
+        "PNB Housing", "LIC Housing Finance", "Home First Finance", "Aptus Value Housing"
+    ],
+    "Media & Entertainment": [
+        "Zee Entertainment"
+    ],
+    "Pharmaceuticals": [
+        "Sun Pharma", "Divi's Labs", "Dr Reddy's", "Cipla", "Lupin", "Torrent Pharma", "Biocon", "Aurobindo Pharma", "Gland Pharma", "Alkem Labs", "Alembic Pharma", "Wockhardt", "Zydus Life"
+    ],
+    "Textiles": [
+        "Page Industries", "Vedant Fashions"
+    ],
+    "Engineering Services": [
+        "Quess Corp", "Craftsman Automation", "Sansera Engineering", "Paras Defence"
+    ],
+    "Fertilizers & Agrochemicals": [
+        "Rallis India", "PI Industries", "India Pesticides"
+    ],
+    "Consumer Durables": [
+        "Whirlpool", "IFB Industries", "Symphony", "Blue Star", "Voltas"
+    ],
+    "Brokers": [
+        "Angel One", "ICICI Securities"
+    ],
+    "Realty": [
+        "Godrej Properties", "Oberoi Realty", "Prestige Estates"
+    ],
+    "Transport": [
+        "VRL Logistics", "Allcargo Logistics", "GATI", "Container Corp", "Blue Dart"
+    ],
+    "BPO/KPO": [
+        "Firstsource Solutions"
+    ],
+    "Biosciences": [
+        "Biocon", "Syngene"
+    ],
+    "Beverages (Soft)": [
+        "Varun Beverages"
+    ],
+    "Retail (Apparel)": [
+        "V-Mart Retail", "Metro Brands"
+    ],
+    "Miscellaneous": [
+        "Emami", "Mirza International", "Quess Corp", "Windlas Biotech", "Syrma SGS", "Stove Kraft", "Rolex Rings", "Exxaro Tiles", "Dodla Dairy", "Rainbow Children"
+    ],
+    # --- More Sectors for Diversity ---
+    "Telecom": [
+        "Bharti Airtel", "Vodafone Idea", "Reliance Jio"
+    ],
+    "Defence": [
+        "HAL", "Bharat Electronics", "BEML", "Mazagon Dock", "Garden Reach Shipbuilders", "Cochin Shipyard", "Bharat Dynamics", "GRSE"
+    ],
+    "Space": [
+        "MTAR Tech", "Centum Electronics", "Avantel", "Data Patterns", "Paras Defence", "Godrej Aerospace", "Ananth Technologies", "Walchandnagar Industries", "BEL Space", "Hindustan Aeronautics Space", "Alpha Design", "Astrome Technologies", "Pixxel", "Skyroot Aerospace", "Dhruva Space"
+    ],
+    "Aerospace": [
+        "HAL", "Bharat Electronics", "Godrej Aerospace", "MTAR Tech"
+    ],
+    "Railways": [
+        "IRCTC", "Rail Vikas Nigam", "IRFC", "Container Corp", "RailTel", "IRCON", "RITES", "NBCC"
+    ],
+    "Sugar": [
+        "Balrampur Chini", "Dhampur Sugar", "Dalmia Bharat Sugar", "Triveni Engineering"
+    ],
+    "Hotels & Hospitality": [
+        "Indian Hotels", "Lemon Tree Hotels", "Taj GVK", "EIH", "Chalet Hotels"
+    ],
+    "Agro": [
+        "Godrej Agrovet", "PI Industries", "Rallis India", "UPL"
+    ],
+    "Mining": [
+        "Coal India", "NMDC", "MOIL", "Hindustan Zinc"
+    ],
+    "Paper": [
+        "JK Paper", "West Coast Paper", "International Paper", "Ballarpur Industries"
+    ],
+    "Plastic": [
+        "Supreme Industries", "Astral Poly", "Finolex Industries"
+    ],
+    "Shipping": [
+        "Shipping Corp", "Great Eastern Shipping", "Dredging Corp"
+    ],
+    "Ports": [
+        "Adani Ports", "Gujarat Pipavav Port", "JSW Infrastructure"
+    ],
+    "Construction": [
+        "L&T", "NBCC", "Simplex Infra", "NCC", "Ahluwalia Contracts"
+    ],
+    "Education": [
+        "Byju's", "Unacademy", "Vedantu", "PhysicsWallah"
+    ],
+    "Fintech": [
+        "Paytm", "PhonePe", "Mobikwik", "Razorpay", "PayU"
+    ],
+    "BPO": [
+        "Firstsource Solutions", "Quess Corp", "TeamLease"
+    ],
+    "Aviation Services": [
+        "Indigo", "SpiceJet", "Jet Airways", "Air India"
+    ],
+    "Media": [
+        "Zee Entertainment", "Sun TV Network", "TV18 Broadcast", "Network18", "PVR INOX", "Shemaroo Entertainment", "Tips Industries", "Saregama India", "Balaji Telefilms", "Dish TV", "Nazara Technologies", "Mukta Arts", "Eros International", "Inox Leisure", "Entertainment Network", "PVR", "INOX Leisure", "Radio City", "Den Networks", "Hathway Cable"
+    ],
+    "Brewery": [
+        "United Breweries", "Radico Khaitan", "Globus Spirits", "Sula Vineyards", "United Spirits", "Varun Beverages", "Som Distilleries", "Tilaknagar Industries", "IFB Agro", "GM Breweries", "Radhika Beverages", "Associated Alcohols", "Piccadily Agro", "Khoday India", "Jagatjit Industries"
+    ],
+    "Footwear & Leather": [
+        "Relaxo Footwear", "Mirza International", "Bata India", "Metro Brands", "Campus Activewear", "Liberty Shoes", "Khadim India", "Sreeleathers", "Action Shoes", "Paragon Footwear", "VKC Group", "Red Chief", "Lancer Footwear", "Aqualite Industries"
+    ],
+    "PSU": [
+        "Bharat Electronics", "BEML", "HAL", "BEL", "BHEL", "Coal India", "NTPC", "ONGC", "GAIL", "SAIL", "IRCTC", "Rail Vikas Nigam", "IRFC", "Container Corp", "PowerGrid", "NHPC", "NLC India", "REC", "PFC", "Mazagon Dock", "Garden Reach Shipbuilders", "Cochin Shipyard", "Hindustan Aeronautics", "Bharat Dynamics", "GRSE", "RailTel", "IRCON", "RITES", "NBCC", "Engineers India", "HUDCO"
+    ],
+    "Space Tech": [
+        "Larsen & Toubro", "Bharat Forge", "MTAR Tech", "Centum Electronics", "Avantel", "Data Patterns", "Paras Defence", "Godrej Aerospace", "Ananth Technologies", "Walchandnagar Industries", "BEL Space", "Hindustan Aeronautics Space", "Alpha Design", "Astrome Technologies", "Pixxel", "Skyroot Aerospace", "Dhruva Space"
+    ],
+    "Mutual Funds": [
+        "HDFC AMC", "Nippon Life AMC", "UTI AMC", "Aditya Birla Sun Life AMC"
+    ],
+    "NBFC": [
+        "Bajaj Finance", "LIC Housing Finance", "PNB Housing", "Muthoot Finance", "Manappuram Finance", "Cholamandalam Finance", "Shriram Transport", "Mahindra Finance", "L&T Finance", "Bajaj Finserv", "Sundaram Finance", "Can Fin Homes", "Repco Home Finance"
+    ],
+    "Asset Management": [
+        "HDFC AMC", "Nippon Life AMC", "UTI AMC", "Aditya Birla Sun Life AMC"
+    ],
+    "Jewelry": [
+        "Kalyan Jewellers", "Titan", "PC Jeweller"
+    ],
+    "Textiles & Apparel": [
+        "Raymond", "Arvind Fashions", "Aditya Birla Fashion", "Pantaloons", "Shoppers Stop", "Westside", "Future Retail", "Spencer's Retail", "Big Bazaar", "Page Industries", "Vedant Fashions"
+    ],
+    "Dairy": [
+        "Mother Dairy", "Amul", "Dodla Dairy"
+    ],
+    "Batteries & EV": [
+        "Exide Industries", "Amara Raja Batteries", "Hero Electric", "Ather Energy", "Okinawa Autotech", "Ampere Vehicles", "Simple Energy", "Bounce Infinity", "Revolt Motors", "Tork Motors", "Ultraviolette", "Mahindra Electric"
+    ],
+    "Automobile Components": [
+        "Motherson Sumi", "Balkrishna Industries", "Sundaram Fasteners", "Bosch", "Schaeffler India", "Timken India", "SKF India"
+    ],
+    "Tyres": [
+        "MRF", "Apollo Tyres", "CEAT"
+    ],
+    "Agro Chemicals": [
+        "PI Industries", "UPL", "Rallis India", "India Pesticides"
+    ],
+    "Fertilizers": [
+        "Coromandel International", "Rallis India", "Gujarat State Fertilizers", "Chambal Fertilizers"
+    ],
+    "Sugar & Allied": [
+        "Balrampur Chini", "Dhampur Sugar", "Dalmia Bharat Sugar", "Triveni Engineering"
+    ],
+    "Cables & Wires": [
+        "Polycab", "Finolex Cables", "KEI Industries"
+    ],
+    "Pipes": [
+        "APL Apollo Tubes", "Supreme Industries", "Finolex Industries"
+    ],
+    "Hotels": [
+        "Indian Hotels", "Lemon Tree Hotels", "Taj GVK", "EIH", "Chalet Hotels"
+    ],
+    "Aerospace & Defence": [
+        "HAL", "Bharat Electronics", "BEML", "Mazagon Dock", "Garden Reach Shipbuilders", "Cochin Shipyard", "Bharat Dynamics", "GRSE", "Godrej Aerospace"
+    ],
+    "Shipping & Ports": [
+        "Shipping Corp", "Great Eastern Shipping", "Dredging Corp", "Adani Ports", "Gujarat Pipavav Port", "JSW Infrastructure"
+    ],
+    "Plastic Products": [
+        "Supreme Industries", "Astral Poly", "Finolex Industries"
+    ],
+    "Paper & Forest": [
+        "JK Paper", "West Coast Paper", "International Paper", "Ballarpur Industries"
+    ],
+    "Education Tech": [
+        "Byju's", "Unacademy", "Vedantu", "PhysicsWallah"
+    ],
+    "Fintech & Payments": [
+        "Paytm", "PhonePe", "Mobikwik", "Razorpay", "PayU"
+    ],
+    "E-Retail": [
+        "Flipkart", "Snapdeal", "Myntra", "Ajio", "Tata Cliq", "Reliance Digital", "Croma", "Vijay Sales", "Pepperfry", "Urban Ladder", "FabIndia"
+    ],
+    "Food Processing": [
+        "Britannia", "Nestle India", "ITC Foods", "Parle", "Cadbury", "Hershey India", "PepsiCo India", "Coca Cola India", "Bisleri", "Kingfisher", "Havmor"
+    ],
+    "Beverages (Alcoholic)": [
+        "United Breweries", "Radico Khaitan", "Globus Spirits", "Sula Vineyards", "United Spirits", "Som Distilleries", "Tilaknagar Industries", "IFB Agro", "GM Breweries", "Radhika Beverages", "Associated Alcohols", "Piccadily Agro", "Khoday India", "Jagatjit Industries"
+    ],
+    "Beverages (Non-Alcoholic)": [
+        "Varun Beverages", "PepsiCo India", "Coca Cola India", "Bisleri"
+    ],
+    "Consumer Electronics": [
+        "Whirlpool", "IFB Industries", "Symphony", "Blue Star", "Voltas", "Godrej Appliances"
+    ],
+    "Home Improvement": [
+        "Asian Paints", "Indigo Paints", "Berger Paints", "Kansai Nerolac"
+    ],
+    "Transport Services": [
+        "VRL Logistics", "Allcargo Logistics", "GATI", "Container Corp", "Blue Dart", "Delhivery"
+    ],
+    "IT Services": [
+        "TCS", "Infosys", "Wipro", "Tech Mahindra", "HCL Tech", "LTIMindtree", "Mphasis", "Coforge", "Oracle Financial"
+    ],
+    "Broking": [
+        "Angel One", "ICICI Securities", "Zerodha", "Groww", "Upstox", "Motilal Oswal"
+    ],
+    "Asset Management Companies": [
+        "HDFC AMC", "Nippon Life AMC", "UTI AMC", "Aditya Birla Sun Life AMC"
+    ],
+    "General Insurance": [
+        "ICICI Lombard", "HDFC Ergo", "Bajaj Allianz", "Star Health", "Care Health", "Religare Health", "Apollo Munich"
+    ],
+    "Life Insurance": [
+        "HDFC Life", "SBI Life", "ICICI Pru Life", "Max Life Insurance", "LIC"
+    ],
+    "Housing Finance Companies": [
+        "LIC Housing Finance", "PNB Housing", "Home First Finance", "Aptus Value Housing", "Repco Home Finance"
+    ],
+    "NBFCs": [
+        "Bajaj Finance", "Muthoot Finance", "Manappuram Finance", "Cholamandalam Finance", "Shriram Transport", "Mahindra Finance", "L&T Finance", "Bajaj Finserv", "Sundaram Finance", "Can Fin Homes"
+    ],
+    "Power": [
+        "NTPC", "PowerGrid", "Tata Power", "Adani Power", "JSW Energy", "NHPC Ltd", "SJVN", "Torrent Power", "CESC", "BHEL Power", "NTPC Green", "Reliance Infra", "Sterlite Power", "Kalpataru Power Ltd", "KEC Infra", "L&T Infra"
+    ],
+    "Airports": [
+        "GMR Airports", "Adani Airports", "Bangalore Int Airport", "Delhi Int Airport", "Mumbai Int Airport", "Chennai Int Airport", "Hyderabad Int Airport", "Kolkata Int Airport", "Cochin Int Airport", "Goa Int Airport", "Jaipur Int Airport", "Lucknow Int Airport", "Ahmedabad Int Airport", "Pune Int Airport", "Indore Int Airport", "Bhopal Int Airport"
+    ],
+    # Add more as needed...
+}
+
+# --- News Events Data ---
+NEWS_EVENTS = [
+    {"message": "Global economic forecast upgraded! Market sentiment positive.", "impact_type": "positive_general", "magnitude": 0.05},
+    {"message": "Recession fears rise. Investors pull back.", "impact_type": "negative_general", "magnitude": 0.04},
+    {"message": "Tech sector booming with new AI advancements!", "impact_type": "positive_sector", "sector": SHARE_SECTORS["IT"], "magnitude": 0.08},
+    {"message": "Auto industry hit by supply chain disruptions.", "impact_type": "negative_sector", "sector": SHARE_SECTORS["Auto"], "magnitude": 0.07},
+    {"message": "{company_name} announces breakthrough product!", "impact_type": "positive_specific", "magnitude": 0.10},
+    {"message": "{company_name} faces major regulatory fines.", "impact_type": "negative_specific", "magnitude": 0.12},
+    {"message": "Interest rates cut unexpectedly. Boost for consumption!", "impact_type": "positive_general", "magnitude": 0.03},
+    {"message": "Oil prices surge, impacting manufacturing costs.", "impact_type": "negative_general", "magnitude": 0.03},
+    {"message": "Pharmaceutical sector reports strong Q4 earnings.", "impact_type": "positive_sector", "sector": SHARE_SECTORS["Pharma"], "magnitude": 0.06},
+    {"message": "Real Estate market slumps due to high inflation.", "impact_type": "negative_sector", "sector": SHARE_SECTORS["Real Estate"], "magnitude": 0.09},
+
+    # Additional news events
+    {"message": "Banking sector sees record loan growth.", "impact_type": "positive_sector", "sector": SHARE_SECTORS["Banking"], "magnitude": 0.07},
+    {"message": "IT sector hit by global data breach concerns.", "impact_type": "negative_sector", "sector": SHARE_SECTORS["IT"], "magnitude": 0.06},
+    {"message": "Government announces infrastructure stimulus package.", "impact_type": "positive_sector", "sector": SHARE_SECTORS["Infrastructure"], "magnitude": 0.09},
+    {"message": "Energy sector faces regulatory uncertainty.", "impact_type": "negative_sector", "sector": SHARE_SECTORS["Energy"], "magnitude": 0.05},
+    {"message": "Consumer Goods demand surges during festival season.", "impact_type": "positive_sector", "sector": SHARE_SECTORS["Consumer Goods"], "magnitude": 0.06},
+    {"message": "Major cyberattack disrupts financial services.", "impact_type": "negative_sector", "sector": SHARE_SECTORS["Finance"], "magnitude": 0.08},
+    {"message": "Aviation sector recovers as travel restrictions ease.", "impact_type": "positive_sector", "sector": SHARE_SECTORS["Aviation"], "magnitude": 0.10},
+    {"message": "FMCG companies face raw material shortages.", "impact_type": "negative_sector", "sector": SHARE_SECTORS["FMCG"], "magnitude": 0.05},
+    {"message": "Strong monsoon boosts agricultural output, benefits related stocks.", "impact_type": "positive_general", "magnitude": 0.04},
+    {"message": "Unexpected political turmoil shakes investor confidence.", "impact_type": "negative_general", "magnitude": 0.06},
+    {"message": "{company_name} secures major international contract.", "impact_type": "positive_specific", "magnitude": 0.09},
+    {"message": "{company_name} CEO resigns unexpectedly.", "impact_type": "negative_specific", "magnitude": 0.08},
+    {"message": "Metal sector rallies on global commodity price surge.", "impact_type": "positive_sector", "sector": SHARE_SECTORS["Metal"], "magnitude": 0.07},
+    {"message": "Cement sector hit by rising input costs.", "impact_type": "negative_sector", "sector": SHARE_SECTORS["Cement"], "magnitude": 0.06},
+    {"message": "Healthcare sector benefits from new government policy.", "impact_type": "positive_sector", "sector": SHARE_SECTORS["Healthcare"], "magnitude": 0.08},
+    {"message": "Logistics sector faces delays due to port congestion.", "impact_type": "negative_sector", "sector": SHARE_SECTORS["Logistics"], "magnitude": 0.07},
+    {"message": "Retail sector enjoys record online sales.", "impact_type": "positive_sector", "sector": SHARE_SECTORS["Retail"], "magnitude": 0.09},
+    {"message": "Gas & Utilities sector hit by regulatory changes.", "impact_type": "negative_sector", "sector": SHARE_SECTORS["Gas & Utilities"], "magnitude": 0.05},
+    {"message": "Engineering sector wins large government contracts.", "impact_type": "positive_sector", "sector": SHARE_SECTORS["Engineering"], "magnitude": 0.07},
+    {"message": "Beverages sector faces new health regulations.", "impact_type": "negative_sector", "sector": SHARE_SECTORS["Beverages"], "magnitude": 0.04},
+    {"message": "Strong rupee boosts import-heavy industries.", "impact_type": "positive_general", "magnitude": 0.03},
+    {"message": "Weak rupee hurts export-oriented companies.", "impact_type": "negative_general", "magnitude": 0.03},
+    {"message": "{company_name} launches successful IPO.", "impact_type": "positive_specific", "magnitude": 0.11},
+    {"message": "{company_name} reports disappointing quarterly results.", "impact_type": "negative_specific", "magnitude": 0.09},
+
+    # More news events for variety
+    {"message": "Major merger announced in the banking sector.", "impact_type": "positive_sector", "sector": SHARE_SECTORS["Banking"], "magnitude": 0.08},
+    {"message": "IT sector faces talent shortage, wage costs rise.", "impact_type": "negative_sector", "sector": SHARE_SECTORS["IT"], "magnitude": 0.04},
+    {"message": "Auto sector launches new electric vehicle models.", "impact_type": "positive_sector", "sector": SHARE_SECTORS["Auto"], "magnitude": 0.07},
+    {"message": "Pharma sector hit by patent expiries.", "impact_type": "negative_sector", "sector": SHARE_SECTORS["Pharma"], "magnitude": 0.05},
+    {"message": "Cement companies benefit from government housing push.", "impact_type": "positive_sector", "sector": SHARE_SECTORS["Cement"], "magnitude": 0.06},
+    {"message": "Metal sector faces export restrictions.", "impact_type": "negative_sector", "sector": SHARE_SECTORS["Metal"], "magnitude": 0.05},
+    {"message": "Energy sector profits from renewable investments.", "impact_type": "positive_sector", "sector": SHARE_SECTORS["Energy"], "magnitude": 0.07},
+    {"message": "Consumer Goods sector hit by weak rural demand.", "impact_type": "negative_sector", "sector": SHARE_SECTORS["Consumer Goods"], "magnitude": 0.04},
+    {"message": "Healthcare sector sees surge in telemedicine adoption.", "impact_type": "positive_sector", "sector": SHARE_SECTORS["Healthcare"], "magnitude": 0.05},
+    {"message": "Logistics sector benefits from e-commerce boom.", "impact_type": "positive_sector", "sector": SHARE_SECTORS["Logistics"], "magnitude": 0.06},
+    {"message": "Real Estate sector recovers as interest rates stabilize.", "impact_type": "positive_sector", "sector": SHARE_SECTORS["Real Estate"], "magnitude": 0.07},
+    {"message": "Finance sector faces stricter lending norms.", "impact_type": "negative_sector", "sector": SHARE_SECTORS["Finance"], "magnitude": 0.05},
+    {"message": "Aviation sector hit by rising fuel prices.", "impact_type": "negative_sector", "sector": SHARE_SECTORS["Aviation"], "magnitude": 0.06},
+    {"message": "Retail sector expands into rural markets.", "impact_type": "positive_sector", "sector": SHARE_SECTORS["Retail"], "magnitude": 0.05},
+    {"message": "FMCG sector launches eco-friendly products.", "impact_type": "positive_sector", "sector": SHARE_SECTORS["FMCG"], "magnitude": 0.04},
+    {"message": "Gas & Utilities sector benefits from new pipeline projects.", "impact_type": "positive_sector", "sector": SHARE_SECTORS["Gas & Utilities"], "magnitude": 0.05},
+    {"message": "Infrastructure sector faces project delays due to weather.", "impact_type": "negative_sector", "sector": SHARE_SECTORS["Infrastructure"], "magnitude": 0.04},
+    {"message": "Electricals sector sees demand spike during summer.", "impact_type": "positive_sector", "sector": SHARE_SECTORS["Electricals"], "magnitude": 0.06},
+    {"message": "Engineering sector hit by global chip shortage.", "impact_type": "negative_sector", "sector": SHARE_SECTORS["Engineering"], "magnitude": 0.05},
+    {"message": "Beverages sector launches new health drinks.", "impact_type": "positive_sector", "sector": SHARE_SECTORS["Beverages"], "magnitude": 0.04},
+    {"message": "{company_name} wins prestigious industry award.", "impact_type": "positive_specific", "magnitude": 0.07},
+    {"message": "{company_name} faces product recall.", "impact_type": "negative_specific", "magnitude": 0.10},
+    {"message": "Market volatility increases ahead of elections.", "impact_type": "negative_general", "magnitude": 0.04},
+    {"message": "Central bank signals stable monetary policy.", "impact_type": "positive_general", "magnitude": 0.02},
+    {"message": "Major foreign investment flows into Indian markets.", "impact_type": "positive_general", "magnitude": 0.05},
+    {"message": "Trade tensions rise with neighboring countries.", "impact_type": "negative_general", "magnitude": 0.04},
+    {"message": "{company_name} partners with global tech giant.", "impact_type": "positive_specific", "magnitude": 0.08},
+    {"message": "{company_name} faces data breach, customer info leaked.", "impact_type": "negative_specific", "magnitude": 0.09},
+    {"message": "Festive season boosts retail and FMCG sales.", "impact_type": "positive_sector", "sector": SHARE_SECTORS["Retail"], "magnitude": 0.06},
+    {"message": "Unseasonal rains disrupt supply chains.", "impact_type": "negative_general", "magnitude": 0.03},
+    {"message": "Government reduces corporate tax rates.", "impact_type": "positive_general", "magnitude": 0.04},
+    {"message": "Inflation rises, consumer spending slows.", "impact_type": "negative_general", "magnitude": 0.04},
+    {"message": "New startup unicorns boost tech sector optimism.", "impact_type": "positive_sector", "sector": SHARE_SECTORS["IT"], "magnitude": 0.05},
+    {"message": "Major infrastructure project inaugurated.", "impact_type": "positive_sector", "sector": SHARE_SECTORS["Infrastructure"], "magnitude": 0.07},
+    {"message": "Power outages hit manufacturing sector.", "impact_type": "negative_sector", "sector": SHARE_SECTORS["Energy"], "magnitude": 0.05},
+    {"message": "{company_name} receives government subsidy.", "impact_type": "positive_specific", "magnitude": 0.09},
+    {"message": "{company_name} faces labor strike at main plant.", "impact_type": "negative_specific", "magnitude": 0.08},
+
+    # --- More custom events for extra variety ---
+    {"message": "Sudden spike in gold prices impacts jewelry sector.", "impact_type": "positive_sector", "sector": SHARE_SECTORS.get("Jewellery", []), "magnitude": 0.07},
+    {"message": "Batteries sector benefits from EV adoption surge.", "impact_type": "positive_sector", "sector": SHARE_SECTORS.get("Batteries", []), "magnitude": 0.06},
+    {"message": "Paints sector hit by rising chemical costs.", "impact_type": "negative_sector", "sector": SHARE_SECTORS.get("Paints", []), "magnitude": 0.05},
+    {"message": "Diagnostics sector sees increased demand due to health awareness.", "impact_type": "positive_sector", "sector": SHARE_SECTORS.get("Diagnostics", []), "magnitude": 0.06},
+    {"message": "Food & Beverages sector faces supply chain bottlenecks.", "impact_type": "negative_sector", "sector": SHARE_SECTORS.get("Food & Beverages", []), "magnitude": 0.04},
+    {"message": "E-Commerce sector reports record-breaking sales.", "impact_type": "positive_sector", "sector": SHARE_SECTORS.get("E-Commerce", []), "magnitude": 0.08},
+    {"message": "Housing Finance sector hit by rising interest rates.", "impact_type": "negative_sector", "sector": SHARE_SECTORS.get("Housing Finance", []), "magnitude": 0.05},
+    {"message": "Media & Entertainment sector booms with new streaming launches.", "impact_type": "positive_sector", "sector": SHARE_SECTORS.get("Media & Entertainment", []), "magnitude": 0.07},
+    {"message": "Pharmaceuticals sector faces regulatory hurdles.", "impact_type": "negative_sector", "sector": SHARE_SECTORS.get("Pharmaceuticals", []), "magnitude": 0.05},
+    {"message": "Textiles sector benefits from export incentives.", "impact_type": "positive_sector", "sector": SHARE_SECTORS.get("Textiles", []), "magnitude": 0.06},
+    {"message": "Engineering Services sector wins international contracts.", "impact_type": "positive_sector", "sector": SHARE_SECTORS.get("Engineering Services", []), "magnitude": 0.07},
+    {"message": "Fertilizers & Agrochemicals sector faces raw material shortages.", "impact_type": "negative_sector", "sector": SHARE_SECTORS.get("Fertilizers & Agrochemicals", []), "magnitude": 0.05},
+    {"message": "Consumer Durables sector sees festive demand spike.", "impact_type": "positive_sector", "sector": SHARE_SECTORS.get("Consumer Durables", []), "magnitude": 0.05},
+    {"message": "Brokers sector hit by regulatory fee hike.", "impact_type": "negative_sector", "sector": SHARE_SECTORS.get("Brokers", []), "magnitude": 0.04},
+    {"message": "Realty sector benefits from new government incentives.", "impact_type": "positive_sector", "sector": SHARE_SECTORS.get("Realty", []), "magnitude": 0.06},
+    {"message": "Transport sector faces fuel price hike.", "impact_type": "negative_sector", "sector": SHARE_SECTORS.get("Transport", []), "magnitude": 0.05},
+    {"message": "BPO/KPO sector sees increased outsourcing demand.", "impact_type": "positive_sector", "sector": SHARE_SECTORS.get("BPO/KPO", []), "magnitude": 0.06},
+    {"message": "Biosciences sector receives major research grant.", "impact_type": "positive_sector", "sector": SHARE_SECTORS.get("Biosciences", []), "magnitude": 0.07},
+    {"message": "Beverages (Soft) sector faces sugar tax proposal.", "impact_type": "negative_sector", "sector": SHARE_SECTORS.get("Beverages (Soft)", []), "magnitude": 0.03},
+    {"message": "Retail (Apparel) sector launches successful new brand.", "impact_type": "positive_sector", "sector": SHARE_SECTORS.get("Retail (Apparel)", []), "magnitude": 0.06},
+    {"message": "Miscellaneous sector sees increased investor interest.", "impact_type": "positive_sector", "sector": SHARE_SECTORS.get("Miscellaneous", []), "magnitude": 0.04},
+    {"message": "Chemicals sector hit by environmental regulations.", "impact_type": "negative_sector", "sector": SHARE_SECTORS.get("Chemicals", []), "magnitude": 0.05},
+    {"message": "Insurance sector benefits from new policy mandates.", "impact_type": "positive_sector", "sector": SHARE_SECTORS.get("Insurance", []), "magnitude": 0.05},
+    {"message": "AMC sector faces increased competition.", "impact_type": "negative_sector", "sector": SHARE_SECTORS.get("AMC", []), "magnitude": 0.04},
+
+    # Random company-specific events for more realism
+    {"message": "{company_name} signs exclusive distribution deal.", "impact_type": "positive_specific", "magnitude": 0.08},
+    {"message": "{company_name} faces lawsuit over patent infringement.", "impact_type": "negative_specific", "magnitude": 0.09},
+    {"message": "{company_name} expands into international markets.", "impact_type": "positive_specific", "magnitude": 0.07},
+    {"message": "{company_name} faces production delays due to equipment failure.", "impact_type": "negative_specific", "magnitude": 0.08},
+    {"message": "{company_name} receives positive analyst upgrade.", "impact_type": "positive_specific", "magnitude": 0.06},
+    {"message": "{company_name} faces negative analyst downgrade.", "impact_type": "negative_specific", "magnitude": 0.06},
+    {"message": "{company_name} announces share buyback program.", "impact_type": "positive_specific", "magnitude": 0.09},
+    {"message": "{company_name} issues profit warning for next quarter.", "impact_type": "negative_specific", "magnitude": 0.07},
+    {"message": "{company_name} launches new sustainability initiative.", "impact_type": "positive_specific", "magnitude": 0.05},
+    {"message": "{company_name} faces cyberattack, operations disrupted.", "impact_type": "negative_specific", "magnitude": 0.10},
+]
+
+# --- NEW: Flash Crash / Bull Run probabilities ---
+FLASH_CRASH_PROBABILITY = 0.005  # 0.5% chance per tick
+BULL_RUN_PROBABILITY = 0.005     # 0.5% chance per tick
+EXTREME_EVENT_MAGNITUDE = 0.15   # 15% immediate change for extreme events
+
+class ShareMarketSimulator:
+    def __init__(self, master):
+        self.master = master
+        master.title("Share Vista: Your Market Journey")
+        master.geometry("1400x900")
+        master.configure(bg="#212121") # Dark background for the window
+
+        # Store initial prices for percentage change calculation
+        self.initial_prices = {name: data[0] for name, data in SHARE_OPTIONS.items()}
+
+        # Price history for the graph (using deque for efficiency)
+        # Increased maxlen for better momentum/mean reversion calculation
+        self.price_history = {name: deque([data[0]], maxlen=100) for name, data in SHARE_OPTIONS.items()}
+
+        # News related attributes
+        self.current_news = None
+        self.tick_count = 0
+
+        # --- Styling with ttk ---
+        style = ttk.Style()
+        style.theme_use('clam') # 'clam', 'alt', 'default', 'classic'
+
+        # General dark theme styles
+        style.configure('TFrame', background='#2e2e2e')
+        style.configure('TLabel', background='#2e2e2e', foreground='#ffffff', font=('Segoe UI', 10))
+        style.configure('TButton', font=('Segoe UI', 10, 'bold'), padding=6, background='#3c3c3c', foreground='#ffffff')
+        style.map('TButton',
+                  foreground=[('active', '#ffffff'), ('!disabled', '#ffffff')],
+                  background=[('active', '#555555'), ('!disabled', '#3c3c3c')])
+
+        # Specific component styles
+        style.configure('Header.TLabel', font=('Segoe UI', 18, 'bold'), foreground='#ffffff', background='#212121')
+        style.configure('Balance.TLabel', font=('Segoe UI', 16, 'bold'), foreground='#00b300', background='#212121') # Green for balance
+        style.configure('News.TLabel', font=('Segoe UI', 11, 'italic'), foreground='#ADD8E6', background='#212121', wraplength=500) # Light blue for news
+
+        # Notebook (Tab) style
+        style.configure('TNotebook', background='#2e2e2e', borderwidth=0)
+        style.configure('TNotebook.Tab', background='#3c3c3c', foreground='#cccccc', padding=(10, 5), font=('Segoe UI', 10, 'bold'))
+        style.map('TNotebook.Tab',
+                  background=[('selected', '#4a4a4a'), ('active', '#555555')],
+                  foreground=[('selected', '#ffffff'), ('active', '#ffffff')])
+
+        # LabelFrame style
+        style.configure('TLabelframe', background='#2e2e2e', foreground='#ffffff', font=('Segoe UI', 12, 'bold'))
+        style.configure('TLabelframe.Label', background='#2e2e2e', foreground='#ffffff') # Text color for label frame title
+
+        # Treeview basic styles (background, foreground, etc.)
+        style.configure('Treeview',
+                        background='#3c3c3c',
+                        foreground='#ffffff',
+                        fieldbackground='#3c3c3c',
+                        font=('Segoe UI', 10),
+                        rowheight=25,
+                        borderwidth=0)
+        style.configure('Treeview.Heading',
+                        font=('Segoe UI', 11, 'bold'),
+                        background='#4a4a4a',
+                        foreground='#ffffff')
+        style.map('Treeview.Heading',
+                  background=[('active', '#555555')])
+        
+        # New style for search entry to match theme
+        style.configure('TEntry', fieldbackground='#4a4a4a', foreground='#ffffff', bordercolor='#555555', lightcolor='#555555', darkcolor='#333333')
+
+
+        self.balance = INITIAL_BALANCE
+        # Portfolio will now store {'quantity': ..., 'avg_price': ..., 'stop_loss_price': None/float, 'take_profit_price': None/float}
+        self.portfolio = {} 
+        
+        self.share_prices = {name: data[0] for name, data in SHARE_OPTIONS.items()}
+        self.min_max_prices = {name: (data[1], data[2]) for name, data in SHARE_OPTIONS.items()}
+
+        # Initialize current_selected_share to None
+        self.current_selected_share = None
+
+        self.load_game_data()
+
+        self.create_widgets() # This is where Treeviews are created.
+
+        # --- Apply tag configurations to the Treeview instances AFTER they are created ---
+        self.market_tree.tag_configure('profit_text', foreground='#00ff00') # Green text for profit
+        self.market_tree.tag_configure('loss_text', foreground='#ff4d4d')   # Red text for loss
+        self.market_tree.tag_configure('neutral_text', foreground='#cccccc') # Neutral text for 0% change
+        self.market_tree.tag_configure('evenrow', background='#3c3c3c', foreground='#ffffff')
+        self.market_tree.tag_configure('oddrow', background='#424242', foreground='#ffffff')
+
+        self.portfolio_tree.tag_configure('profit_text', foreground='#00ff00')
+        self.portfolio_tree.tag_configure('loss_text', foreground='#ff4d4d')
+        self.portfolio_tree.tag_configure('neutral_text', foreground='#cccccc')
+        self.portfolio_tree.tag_configure('evenrow', background='#3c3c3c', foreground='#ffffff')
+        self.portfolio_tree.tag_configure('oddrow', background='#424242', foreground='#ffffff')
+        # ----------------------------------------------------------------------------------
+
+        self.update_portfolio_display()
+        self.update_market_display() # Call with initial filter (empty search)
+        self.update_balance_display()
+        self.update_news_display() # Initial news display
+
+        self.running = True
+        self.price_thread = threading.Thread(target=self.fluctuate_prices_thread, daemon=True)
+        self.price_thread.start()
+
+        master.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+        # Initially select the first share in the market screener to show details
+        if self.market_tree.get_children():
+            first_share_id = self.market_tree.get_children()[0]
+            self.market_tree.selection_set(first_share_id)
+            self.show_share_details(first_share_id)
+
+
+    def load_game_data(self):
+        """Loads balance and portfolio from a JSON file."""
+        if os.path.exists(DATA_FILE):
+            try:
+                with open(DATA_FILE, 'r') as f:
+                    data = json.load(f)
+                    self.balance = data.get('balance', INITIAL_BALANCE)
+                    loaded_portfolio = data.get('portfolio', {})
+                    
+                    self.portfolio = {} # Clear existing portfolio to load fresh
+                    for share_name, share_data in loaded_portfolio.items():
+                        # Ensure loaded portfolio items have 'stop_loss_price' and 'take_profit_price' fields
+                        if 'stop_loss_price' not in share_data:
+                            share_data['stop_loss_price'] = None
+                        if 'take_profit_price' not in share_data: # NEW
+                            share_data['take_profit_price'] = None # NEW
+                        self.portfolio[share_name] = share_data
+                        
+                    loaded_prices = data.get('share_prices', {})
+                    for share_name, initial_data in SHARE_OPTIONS.items():
+                        if share_name in loaded_prices:
+                            self.share_prices[share_name] = loaded_prices[share_name]
+                        else:
+                            # If a new share is added to SHARE_OPTIONS that wasn't in save, initialize its price
+                            self.share_prices[share_name] = initial_data[0] 
+                    # Also load initial prices for percentage calculation if saved
+                    self.initial_prices = data.get('initial_prices', {name: data[0] for name, data in SHARE_OPTIONS.items()})
+                    
+                    # Load price history
+                    loaded_history = data.get('price_history', {})
+                    for share_name, history_list in loaded_history.items():
+                        # Ensure maxlen is respected when loading
+                        self.price_history[share_name] = deque(history_list, maxlen=100) # Increased maxlen
+                    # If new shares are added to SHARE_OPTIONS, ensure they have a deque for history
+                    for share_name in SHARE_OPTIONS:
+                        if share_name not in self.price_history:
+                            self.price_history[share_name] = deque([self.share_prices[share_name]], maxlen=100) # Increased maxlen
+                    
+                    # Load news state
+                    self.current_news = data.get('current_news', None)
+                    self.tick_count = data.get('tick_count', 0)
+
+            except json.JSONDecodeError:
+                messagebox.showerror("Error", "Could not load save data. Starting a new game.")
+                # Reset to initial state if load fails
+                self.balance = INITIAL_BALANCE
+                self.portfolio = {}
+                self.share_prices = {name: data[0] for name, data in SHARE_OPTIONS.items()}
+                self.initial_prices = {name: data[0] for name, data in SHARE_OPTIONS.items()}
+                self.price_history = {name: deque([data[0]], maxlen=100) for name, data in SHARE_OPTIONS.items()} # Increased maxlen
+                self.current_news = None
+                self.tick_count = 0
+        else:
+            messagebox.showinfo("Welcome", "No save data found. Starting a new game!")
+            # Initialize portfolio with stop_loss_price and take_profit_price for any existing shares
+            for share_name in self.portfolio:
+                if 'stop_loss_price' not in self.portfolio[share_name]:
+                    self.portfolio[share_name]['stop_loss_price'] = None
+                if 'take_profit_price' not in self.portfolio[share_name]: # NEW
+                    self.portfolio[share_name]['take_profit_price'] = None # NEW
+
+
+    def save_game_data(self):
+        """Saves current balance and portfolio to a JSON file."""
+        # Convert deques to lists for JSON serialization
+        serializable_price_history = {name: list(hist) for name, hist in self.price_history.items()}
+
+        data = {
+            'balance': self.balance,
+            'portfolio': self.portfolio,
+            'share_prices': self.share_prices,
+            'initial_prices': self.initial_prices, # Save initial prices
+            'price_history': serializable_price_history, # Save price history
+            'current_news': self.current_news, # Save current news
+            'tick_count': self.tick_count # Save tick count
+        }
+        try:
+            with open(DATA_FILE, 'w') as f:
+                json.dump(data, f, indent=4)
+            print("Game data saved successfully.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not save game data: {e}")
+
+    def on_closing(self):
+        """Handles saving data when the window is closed."""
+        self.running = False
+        self.save_game_data()
+        self.master.destroy()
+
+    def create_widgets(self):
+        """Creates the GUI elements."""
+        # --- Header Frame ---
+        header_frame = ttk.Frame(self.master, padding=(20, 15), style='TFrame')
+        header_frame.pack(fill="x")
+        ttk.Label(header_frame, text="Share Vista", style='Header.TLabel').pack(side="left")
+        self.balance_label = ttk.Label(header_frame, text=f"Balance: ₹{self.balance:.2f}", style='Balance.TLabel')
+        self.balance_label.pack(side="right", padx=20)
+        
+        # --- News Display ---
+        self.news_label = ttk.Label(header_frame, text="Market News: No significant events.", style='News.TLabel')
+        self.news_label.pack(pady=5, anchor='center')
+
+        # --- Main Content Frame (PanedWindow for resizable sections) ---
+        main_panedwindow = ttk.PanedWindow(self.master, orient=tk.HORIZONTAL)
+        main_panedwindow.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # --- Left Panel: Screener View ---
+        screener_frame = ttk.Frame(main_panedwindow, style='TFrame')
+        main_panedwindow.add(screener_frame, weight=1)
+
+        # Screener Header and Tabs
+        screener_header_frame = ttk.Frame(screener_frame, style='TFrame', padding=(0, 10))
+        screener_header_frame.pack(fill="x", padx=10, pady=5)
+        ttk.Label(screener_header_frame, text="Screener", font=('Segoe UI', 14, 'bold'), foreground='#ffffff', background='#2e2e2e').pack(side="left")
+
+        # Tabs for Stocks/Crypto
+        self.screener_notebook = ttk.Notebook(screener_header_frame, style='TNotebook')
+        self.screener_notebook.pack(side="left", padx=(20,0)) # Adjusted padding
+
+        stocks_tab_frame = ttk.Frame(self.screener_notebook, style='TFrame')
+        crypto_tab_frame = ttk.Frame(self.screener_notebook, style='TFrame') # Placeholder
+
+        self.screener_notebook.add(stocks_tab_frame, text="Stocks")
+        self.screener_notebook.add(crypto_tab_frame, text="Crypto")
+        self.screener_notebook.select(stocks_tab_frame) # Select Stocks by default
+
+        # --- Search Box ---
+        search_frame = ttk.Frame(screener_frame, style='TFrame', padding=(10, 5))
+        search_frame.pack(fill="x", padx=10, pady=(0, 5))
+
+        ttk.Label(search_frame, text="Search Company:", style='TLabel').pack(side="left", padx=(0, 5))
+        self.search_entry = ttk.Entry(search_frame, width=30, style='TEntry')
+        self.search_entry.pack(side="left", fill="x", expand=True)
+        self.search_entry.bind("<KeyRelease>", self.filter_market_tree)
+        # --- End Search Box ---
+
+        market_table_frame = ttk.Frame(screener_frame, style='TFrame')
+        market_table_frame.pack(fill="both", expand=True, padx=10, pady=(0,10))
+
+        # Using Treeview for market display
+        self.market_tree = ttk.Treeview(market_table_frame, columns=("CompanyName", "Price", "Change"), show="headings", height=20)
+        
+        self.market_tree.heading("CompanyName", text="Company Name", anchor=tk.W)
+        self.market_tree.column("CompanyName", width=150, stretch=tk.NO, anchor=tk.W) 
+        
+        self.market_tree.heading("Price", text="Price", anchor=tk.E)
+        self.market_tree.column("Price", width=100, stretch=tk.NO, anchor=tk.E)
+        
+        self.market_tree.heading("Change", text="Change", anchor=tk.E)
+        self.market_tree.column("Change", width=80, stretch=tk.NO, anchor=tk.E) # Percentage change
+
+        market_scrollbar = ttk.Scrollbar(market_table_frame, orient="vertical", command=self.market_tree.yview)
+        self.market_tree.configure(yscrollcommand=market_scrollbar.set)
+
+        market_scrollbar.pack(side="right", fill="y")
+        self.market_tree.pack(side="left", fill="both", expand=True)
+
+        self.market_tree.bind("<<TreeviewSelect>>", self.on_market_tree_select)
+        self.market_tree.bind("<ButtonRelease-1>", self.on_market_tree_click)
+
+        # --- Right Panel: Detail View and Portfolio View ---
+        right_panel = ttk.Frame(main_panedwindow, style='TFrame')
+        main_panedwindow.add(right_panel, weight=1)
+
+        # Detail View Frame (top right)
+        self.detail_frame = ttk.LabelFrame(right_panel, text="Share Details", padding=(10, 10), style='TLabelframe')
+        self.detail_frame.pack(fill="x", padx=10, pady=10)
+
+        # Frame to hold share info on left and graph on right
+        detail_content_frame = ttk.Frame(self.detail_frame, style='TFrame')
+        detail_content_frame.pack(fill="both", expand=True)
+
+        # Left side of detail content (labels)
+        info_frame = ttk.Frame(detail_content_frame, style='TFrame')
+        info_frame.pack(side="left", fill="y", padx=(0, 10))
+
+        self.detail_company_label = ttk.Label(info_frame, text="Select a share", font=('Segoe UI', 14, 'bold'), foreground='#ffffff', background='#2e2e2e')
+        self.detail_company_label.pack(pady=5, anchor='w')
+
+        self.detail_current_price_label = ttk.Label(info_frame, text="Black Price: ", foreground='#cccccc', background='#2e2e2e')
+        self.detail_current_price_label.pack(pady=2, anchor='w')
+        
+        self.detail_change_label = ttk.Label(info_frame, text="Change: ", foreground='#cccccc', background='#2e2e2e')
+        self.detail_change_label.pack(pady=2, anchor='w')
+
+        # --- Graph Integration ---
+        self.graph_frame = ttk.Frame(detail_content_frame, style='TFrame', relief=tk.RIDGE, borderwidth=2)
+        self.graph_frame.pack(side="right", fill="both", expand=True) # Pack to the right
+
+        # Configure matplotlib for a dark theme
+        plt.style.use('dark_background') # Start with a dark background style
+        self.fig, self.ax = plt.subplots(figsize=(4, 2.5), dpi=100, facecolor='#2e2e2e') # Smaller figure size, higher dpi for clarity
+        self.fig.patch.set_facecolor('#2e2e2e') # Set figure background explicitly
+
+        self.ax.set_facecolor('#212121') # Set axes background
+        self.ax.tick_params(axis='x', colors='white', labelsize=8) # X-axis tick color and size
+        self.ax.tick_params(axis='y', colors='white', labelsize=8) # Y-axis tick color and size
+        self.ax.spines['bottom'].set_color('white') # X-axis line color
+        self.ax.spines['left'].set_color('white') # Y-axis line color
+        self.ax.spines['top'].set_visible(False)
+        self.ax.spines['right'].set_visible(False)
+        self.ax.set_ylabel("Price", color='white', fontsize=9)
+        self.ax.set_xlabel("Time (Ticks)", color='white', fontsize=9) 
+        self.ax.grid(True, linestyle='--', alpha=0.5, color='#555555') # Grid lines
+
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self.graph_frame)
+        self.canvas_widget = self.canvas.get_tk_widget()
+        self.canvas_widget.pack(fill="both", expand=True)
+
+        # Initially clear graph and hide until a share is selected
+        self.ax.clear()
+        self.ax.set_title("Select a Share to View Graph", color='white', fontsize=10)
+        self.canvas.draw()
+        # --- End Graph Integration ---
+
+        # Buy/Sell buttons in detail view (below info_frame and graph_frame)
+        detail_buttons_frame = ttk.Frame(self.detail_frame, style='TFrame')
+        detail_buttons_frame.pack(fill="x", pady=10)
+        self.buy_detail_button = ttk.Button(detail_buttons_frame, text="Buy", command=self.buy_selected_share, style='TButton')
+        self.buy_detail_button.pack(side="left", padx=5)
+        self.sell_detail_button = ttk.Button(detail_buttons_frame, text="Sell", command=self.sell_selected_share, style='TButton')
+        self.sell_detail_button.pack(side="left", padx=5)
+        # NEW: Set Stop-Loss button
+        self.set_stop_loss_button = ttk.Button(detail_buttons_frame, text="Set Stop-Loss", command=self.set_stop_loss_selected_share, style='TButton')
+        self.set_stop_loss_button.pack(side="left", padx=5)
+        # NEW: Set Take-Profit button
+        self.set_take_profit_button = ttk.Button(detail_buttons_frame, text="Set Take-Profit", command=self.set_take_profit_selected_share, style='TButton')
+        self.set_take_profit_button.pack(side="left", padx=5)
+
+
+        # Portfolio View Frame (bottom right)
+        portfolio_frame = ttk.LabelFrame(right_panel, text="My Portfolio", padding=(10, 10), style='TLabelframe')
+        portfolio_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        portfolio_table_frame = ttk.Frame(portfolio_frame, style='TFrame')
+        portfolio_table_frame.pack(fill="both", expand=True)
+
+        # Updated columns for portfolio_tree to include Stop-Loss and Take-Profit
+        self.portfolio_tree = ttk.Treeview(portfolio_table_frame, columns=("CompanyName", "Quantity", "Avg Price", "Current Price", "PnL", "StopLoss", "TakeProfit"), show="headings", height=20)
+        
+        self.portfolio_tree.heading("CompanyName", text="Company Name", anchor=tk.W)
+        self.portfolio_tree.column("CompanyName", width=120, stretch=tk.NO, anchor=tk.W) 
+
+        self.portfolio_tree.heading("Quantity", text="Qty", anchor=tk.E)
+        self.portfolio_tree.column("Quantity", width=50, stretch=tk.NO, anchor=tk.E)
+        
+        self.portfolio_tree.heading("Avg Price", text="Avg Buy", anchor=tk.E)
+        self.portfolio_tree.column("Avg Price", width=80, stretch=tk.NO, anchor=tk.E)
+        
+        self.portfolio_tree.heading("Current Price", text="Current", anchor=tk.E)
+        self.portfolio_tree.column("Current Price", width=80, stretch=tk.NO, anchor=tk.E)
+        
+        self.portfolio_tree.heading("PnL", text="P/L (per)", anchor=tk.E)
+        self.portfolio_tree.column("PnL", width=80, stretch=tk.NO, anchor=tk.E)
+
+        self.portfolio_tree.heading("StopLoss", text="Stop Loss", anchor=tk.E) # New column
+        self.portfolio_tree.column("StopLoss", width=80, stretch=tk.NO, anchor=tk.E) # New column
+
+        self.portfolio_tree.heading("TakeProfit", text="Take Profit", anchor=tk.E) # NEW column
+        self.portfolio_tree.column("TakeProfit", width=80, stretch=tk.NO, anchor=tk.E) # NEW column
+        
+        portfolio_scrollbar = ttk.Scrollbar(portfolio_table_frame, orient="vertical", command=self.portfolio_tree.yview)
+        self.portfolio_tree.configure(yscrollcommand=portfolio_scrollbar.set)
+
+        portfolio_scrollbar.pack(side="right", fill="y")
+        self.portfolio_tree.pack(side="left", fill="both", expand=True)
+
+        self.portfolio_tree.bind("<ButtonRelease-1>", self.on_portfolio_tree_click)
+
+        # Total portfolio value display
+        self.total_portfolio_value_label = ttk.Label(portfolio_frame, text="Total Portfolio Value: ₹{0.00:.2f}", font=('Segoe UI', 12, 'bold'), foreground='#ffffff', background='#2e2e2e')
+        self.total_portfolio_value_label.pack(pady=10, anchor='e') # Pack to end (right)
+
+    def update_balance_display(self):
+        """Updates the balance label."""
+        self.balance_label.config(text=f"Balance: ₹{self.balance:.2f}")
+
+    def update_news_display(self):
+        """Updates the news label."""
+        if self.current_news:
+            display_message = self.current_news.get("display_message", "No significant events.")
+            self.news_label.config(text=f"Market News: {display_message}")
+        else:
+            self.news_label.config(text="Market News: No significant events.")
+
+
+    def filter_market_tree(self, event=None):
+        """Filters the market treeview based on the search entry's content."""
+        search_term = self.search_entry.get().lower()
+
+        # Get currently selected item to re-select it after update
+        selected_item_id = None
+        if self.market_tree.selection():
+            selected_item_id = self.market_tree.selection()[0]
+
+        # Clear existing items
+        for item in self.market_tree.get_children():
+            self.market_tree.delete(item)
+
+        row_counter = 0
+        for share_name in sorted(SHARE_OPTIONS.keys()):
+            if search_term in share_name.lower(): # Case-insensitive search
+                price = self.share_prices.get(share_name, 0.00)
+                initial_price = self.initial_prices.get(share_name, price) 
+
+                percentage_change = ((price - initial_price) / initial_price) * 100 if initial_price != 0 else 0
+
+                if percentage_change > 0:
+                    change_tag = 'profit_text'
+                elif percentage_change < 0:
+                    change_tag = 'loss_text'
+                else:
+                    change_tag = 'neutral_text'
+                
+                row_tag = 'evenrow' if row_counter % 2 == 0 else 'oddrow'
+
+                self.market_tree.insert("", "end", iid=share_name, 
+                                         values=(share_name, f"₹{price:.2f}", f"{percentage_change:+.2f}%"),
+                                         tags=(share_name, row_tag, change_tag))
+                row_counter += 1
+        
+        # Re-select the item if it was previously selected and still exists after filtering
+        if selected_item_id and self.market_tree.exists(selected_item_id):
+            self.market_tree.selection_set(selected_item_id)
+            # Ensure details are updated if the selected item is still visible
+            self.show_share_details(selected_item_id) # Call show_share_details again
+
+    # Modified update_market_display to simply call filter_market_tree
+    def update_market_display(self):
+        """Updates the list of shares and their current prices in the market Treeview."""
+        self.filter_market_tree() # Now, this method just triggers the filter
+
+
+    def on_market_tree_select(self, event):
+        """Handles selection of a share in the market treeview to show details."""
+        selected_item = self.market_tree.selection()
+        if selected_item:
+            share_name = selected_item[0]
+            self.show_share_details(share_name)
+
+    def show_share_details(self, share_name):
+        """Displays details of the selected share in the detail panel and updates the graph."""
+        self.current_selected_share = share_name # Set the currently selected share
+
+        current_price = self.share_prices.get(share_name, 0.00)
+        initial_price = self.initial_prices.get(share_name, current_price)
+        percentage_change = ((current_price - initial_price) / initial_price) * 100 if initial_price != 0 else 0
+
+        self.detail_company_label.config(text=share_name.upper() + " INC.")
+        self.detail_current_price_label.config(text=f"Black Price: ₹{current_price:.2f}") # Renamed to Black Price as in image
+        self.detail_change_label.config(text=f"Change: {percentage_change:+.2f}%")
+        
+        # Set colors for the change label
+        if percentage_change > 0:
+            self.detail_change_label.config(foreground='#00ff00')
+        elif percentage_change < 0:
+            self.detail_change_label.config(foreground='#ff4d4d')
+        else:
+            self.detail_change_label.config(foreground='#cccccc')
+
+        # Update the graph
+        self.ax.clear() # Clear previous plot
+        
+        history = list(self.price_history.get(share_name, deque([], maxlen=100))) # Increased maxlen
+        if history:
+            self.ax.plot(history, color='#1f77b4', linewidth=1.5) # Plot with a nice blue, slightly thinner line
+            self.ax.set_title(f"{share_name} Price History", color='white', fontsize=10) # Smaller title font
+            # Dynamic Y-axis limits for better visualization
+            if len(history) > 1:
+                min_hist_price = min(history) * 0.95 
+                max_hist_price = max(history) * 1.05
+                # Ensure a small buffer even if min/max are the same
+                if min_hist_price == max_hist_price:
+                    min_hist_price *= 0.99
+                    max_hist_price *= 1.01
+                self.ax.set_ylim(min_hist_price, max_hist_price)
+            else: # If only one data point, set a reasonable range
+                self.ax.set_ylim(history[0] * 0.95, history[0] * 1.01) # Small upward buffer
+        else:
+            self.ax.set_title(f"{share_name} Price History (No Data)", color='white', fontsize=10)
+
+        self.canvas.draw() # Redraw the canvas
+
+
+    def on_market_tree_click(self, event):
+        """Handles clicks on the market treeview. No specific action column needed for buy from list."""
+        pass # The selection event handles showing details
+
+    def buy_selected_share(self):
+        """Initiates a buy action for the currently selected share in details."""
+        if hasattr(self, 'current_selected_share') and self.current_selected_share:
+            self.buy_shares(self.current_selected_share)
+        else:
+            messagebox.showinfo("No Share Selected", "Please select a share from the Screener to buy.")
+
+    def sell_selected_share(self):
+        """Initiates a sell action for the currently selected share in details."""
+        if hasattr(self, 'current_selected_share') and self.current_selected_share:
+            self.sell_shares(self.current_selected_share)
+        else:
+            messagebox.showinfo("No Share Selected", "Please select a share from the Screener to sell (even if you own it).")
+    
+    def set_stop_loss_selected_share(self):
+        """Initiates setting a stop-loss for the currently selected share."""
+        if hasattr(self, 'current_selected_share') and self.current_selected_share:
+            self.set_stop_loss(self.current_selected_share)
+        else:
+            messagebox.showinfo("No Share Selected", "Please select a share from the Screener to set a stop-loss.")
+
+    def set_take_profit_selected_share(self): # NEW
+        """Initiates setting a take-profit for the currently selected share."""
+        if hasattr(self, 'current_selected_share') and self.current_selected_share:
+            self.set_take_profit(self.current_selected_share)
+        else:
+            messagebox.showinfo("No Share Selected", "Please select a share from the Screener to set a take-profit.")
+
+
+    def update_portfolio_display(self):
+        """Updates the list of shares in the portfolio Treeview."""
+        for item in self.portfolio_tree.get_children():
+            self.portfolio_tree.delete(item)
+
+        total_portfolio_value = 0
+        row_counter = 0
+
+        for share_name, data in self.portfolio.items():
+            quantity = data['quantity']
+            avg_price = data['avg_price']
+            current_price = self.share_prices.get(share_name, 0)
+            stop_loss_price = data.get('stop_loss_price')
+            take_profit_price = data.get('take_profit_price') # NEW
+
+            if quantity > 0:
+                pnl_per_share = current_price - avg_price
+                
+                if pnl_per_share >= 0:
+                    pnl_tag = "profit_text"
+                else:
+                    pnl_tag = "loss_text"
+                
+                row_bg_tag = "evenrow" if row_counter % 2 == 0 else "oddrow"
+
+                pnl_text = f"{pnl_per_share:+.2f}"
+                stop_loss_text = f"₹{stop_loss_price:.2f}" if stop_loss_price is not None else "N/A"
+                take_profit_text = f"₹{take_profit_price:.2f}" if take_profit_price is not None else "N/A" # NEW
+
+                self.portfolio_tree.insert("", "end", iid=share_name, 
+                                             values=(share_name, quantity, f"₹{avg_price:.2f}", f"₹{current_price:.2f}", pnl_text, stop_loss_text, take_profit_text), # Updated values
+                                             tags=(share_name, row_bg_tag, pnl_tag)) 
+                
+                total_portfolio_value += quantity * current_price
+                row_counter += 1
+
+        self.total_portfolio_value_label.config(text=f"Total Portfolio Value: ₹{total_portfolio_value:.2f}")
+
+    def on_portfolio_tree_click(self, event):
+        """Handles clicks on the portfolio treeview, specifically for selling or setting stop-loss/take-profit."""
+        item_id = self.portfolio_tree.identify_row(event.y)
+        if item_id:
+            share_name = item_id
+            self.market_tree.selection_set(share_name)
+            self.show_share_details(share_name)
+
+
+    def buy_shares(self, share_name):
+        """Handles buying shares, including transaction fees."""
+        current_price = self.share_prices.get(share_name)
+        if current_price is None:
+            messagebox.showerror("Error", f"{share_name} not found in market.")
+            return
+
+        quantity_str = simpledialog.askstring("Buy Shares", f"How many shares of {share_name} (Current Price: ₹{current_price:.2f}) would you like to buy?", parent=self.master)
+        if quantity_str is None:
+            return
+
+        try:
+            quantity = int(quantity_str)
+            if quantity <= 0:
+                raise ValueError("Quantity must be positive.")
+        except ValueError:
+            messagebox.showerror("Invalid Input", "Please enter a valid number for quantity.")
+            return
+
+        cost_before_fee = quantity * current_price
+        transaction_fee = round(cost_before_fee * TRANSACTION_FEE_PERCENTAGE, 2) # Calculate fee
+        total_cost = cost_before_fee + transaction_fee
+
+        if self.balance >= total_cost:
+            self.balance -= total_cost
+            
+            if share_name in self.portfolio:
+                old_quantity = self.portfolio[share_name]['quantity']
+                old_avg_price = self.portfolio[share_name]['avg_price']
+                existing_stop_loss = self.portfolio[share_name].get('stop_loss_price') 
+                existing_take_profit = self.portfolio[share_name].get('take_profit_price') # NEW
+
+                new_total_cost_basis = (old_quantity * old_avg_price) + (quantity * current_price)
+                new_quantity = old_quantity + quantity
+                new_avg_price = new_total_cost_basis / new_quantity
+                self.portfolio[share_name] = {'quantity': new_quantity, 'avg_price': round(new_avg_price, 2), 
+                                               'stop_loss_price': existing_stop_loss, 'take_profit_price': existing_take_profit} # NEW
+            else:
+                self.portfolio[share_name] = {'quantity': quantity, 'avg_price': round(current_price, 2), 
+                                               'stop_loss_price': None, 'take_profit_price': None} # Initialize stop-loss & take-profit
+
+            messagebox.showinfo("Success", f"Successfully bought {quantity} shares of {share_name} for ₹{cost_before_fee:.2f} (Fee: ₹{transaction_fee:.2f}).")
+            self.update_balance_display()
+            self.update_portfolio_display()
+            self.save_game_data()
+        else:
+            messagebox.showerror("Insufficient Funds", f"You need ₹{total_cost:.2f} (including fee) but only have ₹{self.balance:.2f}.")
+
+    def sell_shares(self, share_name, is_stop_loss_triggered=False, is_take_profit_triggered=False): # Added take-profit flag
+        """Handles selling shares, including transaction fees and trigger flags."""
+        if share_name not in self.portfolio or self.portfolio[share_name]['quantity'] <= 0:
+            if not is_stop_loss_triggered and not is_take_profit_triggered: # Avoid redundant error message for triggered sell
+                messagebox.showerror("Error", f"You don't own any shares of {share_name}.")
+            return False 
+
+        current_price = self.share_prices.get(share_name)
+        if current_price is None:
+            messagebox.showerror("Error", f"{share_name} not found in market.")
+            return False
+
+        quantity_owned = self.portfolio[share_name]['quantity']
+        
+        if not is_stop_loss_triggered and not is_take_profit_triggered: # If not triggered, ask for quantity
+            quantity_str = simpledialog.askstring("Sell Shares", f"How many shares of {share_name} (Owned: {quantity_owned}, Current Price: ₹{current_price:.2f}) would you like to sell?", parent=self.master)
+            if quantity_str is None:
+                return False
+
+            try:
+                quantity = int(quantity_str)
+                if quantity <= 0:
+                    raise ValueError("Quantity must be positive.")
+                if quantity > quantity_owned:
+                    raise ValueError(f"You only own {quantity_owned} shares of {share_name}.")
+            except ValueError as e:
+                messagebox.showerror("Invalid Input", f"Please enter a valid number for quantity: {e}")
+                return False
+        else: # If triggered by stop-loss or take-profit, sell all owned shares
+            quantity = quantity_owned
+
+
+        earnings_before_fee = quantity * current_price
+        transaction_fee = round(earnings_before_fee * TRANSACTION_FEE_PERCENTAGE, 2) # Calculate fee
+        net_earnings = earnings_before_fee - transaction_fee
+
+        original_avg_price = self.portfolio[share_name]['avg_price']
+        profit_loss = (current_price - original_avg_price) * quantity
+
+        self.balance += net_earnings
+        self.portfolio[share_name]['quantity'] -= quantity
+
+        message_prefix = "Successfully sold"
+        if is_stop_loss_triggered:
+            message_prefix = f"Stop-Loss Triggered! Automatically sold"
+            # Remove stop-loss after it's triggered and executed
+            if share_name in self.portfolio: 
+                 self.portfolio[share_name]['stop_loss_price'] = None
+        elif is_take_profit_triggered: # NEW
+            message_prefix = f"Take-Profit Triggered! Automatically sold" # NEW
+            if share_name in self.portfolio: # NEW
+                self.portfolio[share_name]['take_profit_price'] = None # NEW
+
+        if self.portfolio[share_name]['quantity'] == 0:
+            del self.portfolio[share_name]
+
+        messagebox.showinfo("Sale Complete", f"{message_prefix} {quantity} shares of {share_name} for ₹{earnings_before_fee:.2f} (Fee: ₹{transaction_fee:.2f}). "
+                                             f"Profit/Loss: ₹{profit_loss:+.2f}.")
+        self.update_balance_display()
+        self.update_portfolio_display()
+        self.save_game_data()
+        return True 
+
+    def set_stop_loss(self, share_name):
+        """Sets a stop-loss price for a given share."""
+        if share_name not in self.portfolio or self.portfolio[share_name]['quantity'] <= 0:
+            messagebox.showerror("Error", f"You don't own any shares of {share_name} to set a stop-loss.")
+            return
+
+        current_price = self.share_prices.get(share_name)
+        if current_price is None:
+            messagebox.showerror("Error", f"{share_name} not found in market.")
+            return
+        
+        existing_stop_loss = self.portfolio[share_name].get('stop_loss_price')
+        prompt_message = f"Enter stop-loss price for {share_name} (Current Price: ₹{current_price:.2f}).\n"
+        if existing_stop_loss is not None:
+            prompt_message += f"Current Stop-Loss: ₹{existing_stop_loss:.2f}.\n"
+        prompt_message += "Enter 0 to remove stop-loss."
+
+        stop_loss_str = simpledialog.askstring("Set Stop-Loss", prompt_message, parent=self.master)
+        if stop_loss_str is None:
+            return
+
+        try:
+            stop_loss_price = float(stop_loss_str)
+            if stop_loss_price < 0:
+                raise ValueError("Stop-loss price cannot be negative.")
+            if stop_loss_price >= current_price and stop_loss_price != 0:
+                messagebox.showwarning("Warning", "Stop-loss price should generally be below the current price for protection. Set a lower price.")
+                return 
+            
+            if stop_loss_price == 0:
+                self.portfolio[share_name]['stop_loss_price'] = None
+                messagebox.showinfo("Stop-Loss Removed", f"Stop-loss for {share_name} has been removed.")
+            else:
+                self.portfolio[share_name]['stop_loss_price'] = round(stop_loss_price, 2)
+                messagebox.showinfo("Stop-Loss Set", f"Stop-loss for {share_name} set at ₹{stop_loss_price:.2f}.")
+            
+            self.update_portfolio_display()
+            self.save_game_data()
+
+        except ValueError:
+            messagebox.showerror("Invalid Input", "Please enter a valid number for stop-loss price.")
+            return
+
+    def set_take_profit(self, share_name): # NEW Method
+        """Sets a take-profit price for a given share."""
+        if share_name not in self.portfolio or self.portfolio[share_name]['quantity'] <= 0:
+            messagebox.showerror("Error", f"You don't own any shares of {share_name} to set a take-profit.")
+            return
+
+        current_price = self.share_prices.get(share_name)
+        if current_price is None:
+            messagebox.showerror("Error", f"{share_name} not found in market.")
+            return
+        
+        existing_take_profit = self.portfolio[share_name].get('take_profit_price')
+        prompt_message = f"Enter take-profit price for {share_name} (Current Price: ₹{current_price:.2f}).\n"
+        if existing_take_profit is not None:
+            prompt_message += f"Current Take-Profit: ₹{existing_take_profit:.2f}.\n"
+        prompt_message += "Enter 0 to remove take-profit."
+
+        take_profit_str = simpledialog.askstring("Set Take-Profit", prompt_message, parent=self.master)
+        if take_profit_str is None:
+            return
+
+        try:
+            take_profit_price = float(take_profit_str)
+            if take_profit_price < 0:
+                raise ValueError("Take-profit price cannot be negative.")
+            if take_profit_price <= current_price and take_profit_price != 0:
+                messagebox.showwarning("Warning", "Take-profit price should generally be above the current price to secure gains. Set a higher price.")
+                return 
+            
+            if take_profit_price == 0:
+                self.portfolio[share_name]['take_profit_price'] = None
+                messagebox.showinfo("Take-Profit Removed", f"Take-profit for {share_name} has been removed.")
+            else:
+                self.portfolio[share_name]['take_profit_price'] = round(take_profit_price, 2)
+                messagebox.showinfo("Take-Profit Set", f"Take-profit for {share_name} set at ₹{take_profit_price:.2f}.")
+            
+            self.update_portfolio_display()
+            self.save_game_data()
+
+        except ValueError:
+            messagebox.showerror("Invalid Input", "Please enter a valid number for take-profit price.")
+            return
+
+
+    def generate_news_event(self):
+        """Generates a random news event and applies its impact."""
+        event_data = random.choice(NEWS_EVENTS)
+        self.current_news = event_data # Store the full event data
+
+        # If it's a specific company news, pick a random company
+        if event_data["impact_type"] == "positive_specific" or event_data["impact_type"] == "negative_specific":
+            chosen_company = random.choice(list(SHARE_OPTIONS.keys()))
+            event_data["target_company"] = chosen_company
+            event_data["display_message"] = event_data["message"].format(company_name=chosen_company)
+        else:
+            event_data["display_message"] = event_data["message"]
+        
+        self.update_news_display()
+
+
+    def fluctuate_prices_thread(self):
+        """Continuously fluctuates share prices, applies sophisticated logic, and checks for orders."""
+        while self.running:
+            self.tick_count += 1
+
+            # Generate news periodically
+            if self.tick_count % NEWS_TICK_INTERVAL == 0:
+                self.generate_news_event()
+
+            # --- Extreme Market Events (Flash Crash/Bull Run) ---
+            market_wide_impact = 0
+            event_message = None
+            if random.random() < FLASH_CRASH_PROBABILITY:
+                market_wide_impact = -EXTREME_EVENT_MAGNITUDE
+                event_message = "Market Alert: Flash Crash Detected!"
+            elif random.random() < BULL_RUN_PROBABILITY:
+                market_wide_impact = EXTREME_EVENT_MAGNITUDE
+                event_message = "Market Alert: Sudden Bull Run!"
+            
+            if event_message:
+                self.master.after(0, messagebox.showwarning, "Market Event", event_message)
+
+
+            # --- Calculate Sector-wise average changes for correlation ---
+            sector_avg_changes = {}
+            for sector, shares in SHARE_SECTORS.items():
+                sector_changes = []
+                for share_name in shares:
+                    if share_name in self.price_history and len(self.price_history[share_name]) >= 2:
+                        # Consider change over last 2 ticks for short-term correlation
+                        last_prices = list(self.price_history[share_name])[-2:]
+                        if last_prices[0] != 0:
+                            sector_changes.append((last_prices[1] - last_prices[0]) / last_prices[0])
+                if sector_changes:
+                    sector_avg_changes[sector] = sum(sector_changes) / len(sector_changes)
+                else:
+                    sector_avg_changes[sector] = 0
+
+            # --- Price Fluctuation Loop ---
+            for share_name in self.share_prices:
+                current_price = self.share_prices[share_name]
+                min_price, max_price = self.min_max_prices[share_name]
+
+                if share_name not in self.initial_prices:
+                    self.initial_prices[share_name] = current_price
+
+                change_percentage = random.uniform(-0.01, 0.01) # Base fluctuation (-1% to +1%)
+
+                # 1. Momentum (based on recent history)
+                history = list(self.price_history.get(share_name, []))
+                if len(history) >= 5: # Need at least 5 data points for momentum
+                    recent_changes = [ (history[i] - history[i-1]) / history[i-1] for i in range(1, len(history)) if history[i-1] != 0 ]
+                    if len(recent_changes) > 0:
+                        avg_recent_change = sum(recent_changes[-5:]) / len(recent_changes[-5:]) # Avg of last 5 changes
+                        change_percentage += avg_recent_change * 0.5 # 50% of recent momentum
+                
+                # 2. Reversion to Mean (using initial price as the mean)
+                mean_price = self.initial_prices.get(share_name, current_price)
+                deviation = current_price - mean_price
+                if abs(deviation) > mean_price * 0.05: # If price deviates by more than 5% from initial mean
+                    reversion_bias = -deviation / mean_price * 0.01 # Pull it back by 1% of the deviation
+                    change_percentage += reversion_bias
+
+                # 3. Correlation (apply sector movement)
+                for sector, shares in SHARE_SECTORS.items():
+                    if share_name in shares and sector_avg_changes[sector] != 0:
+                        change_percentage += sector_avg_changes[sector] * 0.3 # 30% influence from sector avg
+
+                # 4. News Impact
+                if self.current_news:
+                    news_type = self.current_news["impact_type"]
+                    news_magnitude = self.current_news["magnitude"]
+
+                    if news_type == "positive_general":
+                        change_percentage += news_magnitude 
+                    elif news_type == "negative_general":
+                        change_percentage -= news_magnitude 
+                    elif news_type == "positive_sector" and share_name in self.current_news.get("sector", []):
+                        change_percentage += news_magnitude 
+                    elif news_type == "negative_sector" and share_name in self.current_news.get("sector", []):
+                        change_percentage -= news_magnitude 
+                    elif news_type == "positive_specific" and share_name == self.current_news.get("target_company"):
+                        change_percentage += news_magnitude * 1.5 
+                    elif news_type == "negative_specific" and share_name == self.current_news.get("target_company"):
+                        change_percentage -= news_magnitude * 1.5 
+                
+                # 5. Extreme Market Event Impact
+                if market_wide_impact != 0:
+                    change_percentage += market_wide_impact
+
+                change_amount = current_price * change_percentage
+                new_price = current_price + change_amount
+
+                # Cap prices within min/max bounds
+                new_price = max(min_price, min(max_price, new_price))
+
+                self.share_prices[share_name] = round(new_price, 2)
+                if share_name in self.price_history:
+                    self.price_history[share_name].append(self.share_prices[share_name])
+
+            # --- Stop-Loss and Take-Profit Monitoring ---
+            shares_to_check = list(self.portfolio.keys())
+            for share_name in shares_to_check:
+                if share_name in self.portfolio: 
+                    share_data = self.portfolio[share_name]
+                    if share_data['quantity'] > 0:
+                        current_price = self.share_prices.get(share_name)
+
+                        # Check Stop-Loss
+                        stop_loss_price = share_data.get('stop_loss_price')
+                        if stop_loss_price is not None and current_price is not None and current_price <= stop_loss_price:
+                            self.master.after(0, self.sell_shares, share_name, True, False) # is_stop_loss_triggered=True
+
+                        # Check Take-Profit (NEW)
+                        take_profit_price = share_data.get('take_profit_price')
+                        if take_profit_price is not None and current_price is not None and current_price >= take_profit_price:
+                            self.master.after(0, self.sell_shares, share_name, False, True) # is_take_profit_triggered=True
+            # --- End Stop-Loss and Take-Profit Monitoring ---
+
+            # Use master.after to schedule GUI updates on the main thread
+            self.master.after(0, self.update_market_display) 
+            self.master.after(0, self.update_portfolio_display)
+            self.master.after(0, self.update_balance_display)
+            
+            if self.current_selected_share: 
+                self.master.after(0, self.show_share_details, self.current_selected_share)
+
+            time.sleep(SHARE_TICK_INTERVAL / 1000)
+
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = ShareMarketSimulator(root)
+    root.mainloop()
